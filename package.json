@@ -2,7 +2,7 @@
   "name": "nazil-api-service",
   "version": "1.0.0",
   "description": "Nazil API Service - Node.js + Express + MySQL backend",
-  "main": "server.js",
+  "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "node index.js",
