@@ -55,6 +55,25 @@ export async function createNewOrder(req, res) {
 }
 
 
+export async function getOrdersCountByPosition(req, res) {
+  try {
+    const [rows] = await pool.query(`
+      SELECT position_id, COUNT(*) AS total_orders
+      FROM orders
+      GROUP BY position_id
+      ORDER BY position_id
+    `);
+
+    res.json({
+      message: "Orders grouped by position",
+      stats: rows
+    });
+  } catch (err) {
+    console.error("Get orders count by position error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
 // حذف طلب
 export async function deleteOrderById(req, res) {
   const { id } = req.params;

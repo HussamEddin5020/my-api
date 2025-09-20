@@ -7,7 +7,8 @@ import {
   deleteOrderById,
   getFullOrder,
   createFullOrder,
-  updateOrderUnified
+  updateOrderUnified,
+  getOrdersCountByPosition
 } from "../controllers/orderController.js";
 
 
@@ -34,5 +35,5 @@ router.put(
   updateOrderUnified                    // يستخدم unified
 );
 
-
+router.get("/stats/by-position", authMiddleware, getOrdersCountByPosition);
 export default router;
