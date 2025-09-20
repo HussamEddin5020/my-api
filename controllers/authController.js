@@ -1,42 +1,83 @@
-// index.js
-import express from "express";
+// controllers/authController.js
+import pool from "../config/db.js";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
-import cors from "cors";
-
-import userRoutes from "./routes/userRoutes.js";
-import customerRoutes from "./routes/customerRoutes.js";
-import orderRoutes from "./routes/orderRoutes.js";
-import authRoutes from "./routes/authRoutes.js";
+import { logSystemAudit, logCustomerAudit } from "../utils/auditLogger.js";
 
 dotenv.config();
+const JWT_SECRET = process.env.JWT_SECRET;
 
-const app = express();
+export async function login(req, res) {
+  const { email, password } = req.body;
 
-// Middleware
-app.use(express.json());
+  try {
+    // 1) Find user by email (any type)
+    const [rows] = await pool.query(
+      `SELECT * FROM users WHERE email = ?`,
+      [email]
+    );
 
-// ✅ CORS مفتوح للجميع (للتجارب والتطوير)
-app.use(
-  cors({
-    origin: "*", // يسمح لأي دومين
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "Invalid credentials" });
+    }
 
-// Routes
-app.use("/api/users", userRoutes);
-app.use("/api/customers", customerRoutes);
-app.use("/api/orders", orderRoutes);
-app.use("/api", authRoutes);
+    const user = rows[0];
 
-// Root Test
-app.get("/", (req, res) => {
-  res.send("Nazil API Service is running 🚀");
-});
+    // 2) Check password
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) {
+      return res.status(400).json({ error: "Invalid credentials" });
+    }
 
-// Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Nazil API Service running on port ${PORT}`);
-});
+    // 3) Generate JWT
+    const token = jwt.sign(
+      { id: user.id, type: user.type },
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    // 4) Audit logs (separate per type)
+  /*  if (user.type === "customer") {
+      await logCustomerAudit({
+        actorCustomerId: user.id,
+        entityType: "customer",
+        entityId: user.id,
+        action: "LOGIN",
+        oldData: null,
+        newData: { email: user.email }
+      });
+    } else {
+      await logSystemAudit({
+        actorUserId: user.id,
+        entityType: "user",
+        entityId: user.id,
+        action: "LOGIN",
+        oldData: null,
+        newData: { email: user.email }
+      });
+    }*/
+
+    // 5) Save login event
+    await pool.query(
+      `INSERT INTO login_events (user_id, login_time) VALUES (?, NOW())`,
+      [user.id]
+    );
+
+    // 6) Response
+    res.json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        type: user.type,
+        status: user.status
+      }
+    });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
