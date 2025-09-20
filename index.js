@@ -2,11 +2,11 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-
 import userRoutes from "./routes/userRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import locationRoutes from "./routes/locationRoutes.js";
 
 dotenv.config();
 
@@ -29,7 +29,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api", authRoutes);
-
+app.use("/api", locationRoutes);
 // Root Test
 app.get("/", (req, res) => {
   res.send("Nazil API Service is running 🚀");
