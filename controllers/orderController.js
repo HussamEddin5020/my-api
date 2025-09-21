@@ -100,6 +100,28 @@ export async function deleteOrderById(req, res) {
   }
 }
 
+
+export async function getOrdersCountByMonth(req, res) {
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        DATE_FORMAT(created_at, '%Y-%m') AS month,
+        COUNT(*) AS total_orders
+      FROM orders
+      GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+      ORDER BY month
+    `);
+
+    res.json({
+      message: "Orders count per month",
+      stats: rows
+    });
+  } catch (err) {
+    console.error("Get orders count by month error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
 // إنشاء طلب كامل
 export async function createFullOrder(req, res) {
   const { creator_user_id, creator_customer_id, customer_id, collection_id, position_id, details } = req.body;

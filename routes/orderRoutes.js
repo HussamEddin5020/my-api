@@ -8,7 +8,8 @@ import {
   getFullOrder,
   createFullOrder,
   updateOrderUnified,
-  getOrdersCountByPosition
+  getOrdersCountByPosition,
+  getOrdersCountByMonth
 } from "../controllers/orderController.js";
 
 
@@ -34,6 +35,8 @@ router.put(
   checkPermission("purchased", "update"), // يتأكد إن عنده صلاحية
   updateOrderUnified                    // يستخدم unified
 );
+
+router.get("/stats/monthly", authMiddleware, getOrdersCountByMonth);
 
 router.get("/stats/by-position", authMiddleware, getOrdersCountByPosition);
 export default router;
