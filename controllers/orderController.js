@@ -59,13 +59,14 @@ export async function getOrdersCountByPosition(req, res) {
   try {
     const [rows] = await pool.query(`
   SELECT 
-    p.id AS position_id,
-    p.name AS position_name, 
-    COUNT(o.id) AS total_orders
-  FROM orders o
-  JOIN order_position p ON o.position_id = p.id
-  GROUP BY p.id, p.name
-  ORDER BY p.id
+  p.id AS position_id,
+  p.name AS position_name,
+  COUNT(o.id) AS total_orders
+FROM order_position p
+LEFT JOIN orders o ON o.position_id = p.id
+GROUP BY p.id, p.name
+ORDER BY p.id;
+
 `);
 
     res.json({
