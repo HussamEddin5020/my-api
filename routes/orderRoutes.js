@@ -9,7 +9,8 @@ import {
   createFullOrder,
   updateOrderUnified,
   getOrdersCountByPosition,
-  getOrdersCountByMonth
+  getOrdersCountByMonth,
+  getOrdersByPosition
 } from "../controllers/orderController.js";
 
 
@@ -34,6 +35,12 @@ router.put(
   authMiddleware,                       // يقرأ JWT
   checkPermission("purchased", "update"), // يتأكد إن عنده صلاحية
   updateOrderUnified                    // يستخدم unified
+);
+
+router.get(
+  "/by-position/:positionId",
+  authMiddleware,
+  getOrdersByPosition
 );
 
 router.get("/stats/monthly", authMiddleware, getOrdersCountByMonth);

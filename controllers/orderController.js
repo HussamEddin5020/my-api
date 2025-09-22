@@ -333,3 +333,47 @@ export async function updateOrderUnified(req, res) {
   }
 }
 
+export async function getOrdersByPosition(req, res) {
+  const { positionId } = req.params;
+
+  try {
+    const [rows] = await pool.query(
+      `
+      SELECT 
+          o.id AS order_id,
+          d.title,
+          d.prepaid_value,
+          d.total,
+          p.name AS position_name,
+          CASE
+              WHEN o.creator_user_id IS NOT NULL 
+                   THEN (SELECT u.name FROM users u WHERE u.id = o.creator_user_id)
+              WHEN o.creator_customer_id IS NOT NULL 
+                   THEN (SELECT u2.name 
+                         FROM customers c2 
+                         JOIN users u2 ON c2.user_id = u2.id
+                         WHERE c2.id = o.creator_customer_id)
+              ELSE NULL
+          END AS created_by_name,
+          (SELECT u3.name 
+           FROM customers c3 
+           JOIN users u3 ON c3.user_id = u3.id
+           WHERE c3.id = o.customer_id) AS customer_name
+      FROM orders o
+      JOIN order_position p ON o.position_id = p.id
+      LEFT JOIN order_details d ON d.order_id = o.id
+      WHERE o.position_id = ?
+      `,
+      [positionId]
+    );
+
+    res.json({
+      message: "Orders fetched successfully",
+      positionId,
+      orders: rows
+    });
+  } catch (err) {
+    console.error("Get orders by position error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
