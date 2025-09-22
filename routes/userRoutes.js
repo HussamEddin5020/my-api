@@ -8,7 +8,8 @@ import {
   updateUserById,
   deleteUserById,
   getMe,
-  registerUserWithPermissions 
+  registerUserWithPermissions,
+  getAccessiblePositions
 } from "../controllers/userController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import { getUserPermissionsApi } from "../controllers/userController.js";
@@ -27,6 +28,7 @@ router.put("/:id", authMiddleware, updateUserById);
 router.delete("/:id", authMiddleware, deleteUserById);
 router.post("/register-with-perms", registerUserWithPermissions);
 router.get("/:id/permissions", authMiddleware, getUserPermissionsApi);
+router.get("/positions/accessible", authMiddleware, getAccessiblePositions);
 
 
 export default router;

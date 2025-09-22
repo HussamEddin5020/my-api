@@ -7,7 +7,9 @@ import {
   updateCustomerById,
   deleteCustomerById,
   getCustomerDetailsApi,
-  getAllCustomerDetailsApi
+  getAllCustomerDetailsApi,
+  getMyCustomer,
+
 } from "../controllers/customerController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 
@@ -23,5 +25,7 @@ router.get("/:id", authMiddleware, getCustomer);
 router.get("/:id/details", authMiddleware, getCustomerDetailsApi);
 router.put("/:id", authMiddleware, updateCustomerById);
 router.delete("/:id", authMiddleware, deleteCustomerById);
+router.get("/simple/Customer", getMyCustomer);
+
 
 export default router;

@@ -236,3 +236,34 @@ export async function getAllCustomerDetailsApi(req, res) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+export async function getMyCustomer(req, res) {
+  try {
+    console.log("🔎 Running query: getSimpleCustomers");
+
+    const [rows] = await pool.query(
+      `SELECT c.id AS customer_id, u.name AS customer_name
+       FROM customers c
+       JOIN users u ON c.user_id = u.id`
+    );
+
+    console.log("✅ Query result:", rows);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "No customers found" });
+    }
+
+    res.json({
+      message: "Customers fetched successfully",
+      customers: rows
+    });
+  } catch (err) {
+    console.error("❌ Get simple customers error:", err);
+    res.status(500).json({ error: "Internal server error", details: err.message });
+  }
+}
+
+
+
+

@@ -287,3 +287,43 @@ export async function getUserPermissionsApi(req, res) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+export async function getAccessiblePositions(req, res) {
+  const { id: userId } = req.user; // userId من التوكن
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT 
+          op.id AS position_id,
+          op.name AS position_name,
+          GROUP_CONCAT(p.name) AS permissions
+       FROM order_position op
+       JOIN actions a ON a.id = op.id
+       JOIN user_permissions up ON up.action_id = a.id
+       JOIN permissions p ON p.id = up.permission_id
+       WHERE up.user_id = ?
+       GROUP BY op.id, op.name
+       ORDER BY op.id`,
+      [userId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(403).json({ error: "لا توجد صلاحيات على أي مرحلة" });
+    }
+
+    const positions = rows.map(r => ({
+      id: r.position_id,
+      name: r.position_name,
+      permissions: r.permissions ? r.permissions.split(",") : []
+    }));
+
+    res.json({
+      message: "Positions accessible by user",
+      positions
+    });
+  } catch (err) {
+    console.error("Get accessible positions error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
