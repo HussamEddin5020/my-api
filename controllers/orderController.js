@@ -101,6 +101,8 @@ export async function deleteOrderById(req, res) {
   }
 }
 
+
+
 export async function getOrdersCountByMonth(req, res) {
   try {
     const [rows] = await pool.query(`
@@ -284,20 +286,99 @@ export async function getFullOrder(req, res) {
       }))
     };
 
-    // 2) النشاطات بدل history
+   /* // 2) النشاطات بدل history
     const [activityRows] = await pool.query(
       `SELECT * FROM order_activity_log WHERE order_id = ? ORDER BY changed_at DESC`,
       [id]
     );
 
     order.activities = activityRows;
-
+*/
     res.json(order);
   } catch (err) {
     console.error("Get full order error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+export async function getOrderWithDetails(req, res) {
+  try {
+    const { id } = req.params;
+
+    const [rows] = await pool.query(`
+      SELECT 
+        o.id AS order_id,
+        o.customer_id,
+        o.creator_user_id,
+        o.creator_customer_id,
+        o.collection_id,
+        o.position_id,
+        o.created_at,
+        o.updated_at,
+        d.id AS detail_id,
+        d.title,
+        d.description,
+        d.notes,
+        d.color,
+        d.size,
+        d.capacity,
+        d.prepaid_value,
+        d.original_product_price,
+        d.commission,
+        d.total,
+        d.image_url
+      FROM orders o
+      LEFT JOIN order_details d ON o.id = d.order_id
+      WHERE o.id = ?
+      ORDER BY d.id
+    `, [id]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    const order = {
+      order_id: rows[0].order_id,
+      customer_id: rows[0].customer_id,
+      creator_user_id: rows[0].creator_user_id,
+      creator_customer_id: rows[0].creator_customer_id,
+      collection_id: rows[0].collection_id,
+      position_id: rows[0].position_id,
+      created_at: rows[0].created_at,
+      updated_at: rows[0].updated_at,
+      details: []
+    };
+
+    rows.forEach(row => {
+      if (row.detail_id) {
+        order.details.push({
+          detail_id: row.detail_id,
+          title: row.title,
+          description: row.description,
+          notes: row.notes,
+          color: row.color,
+          size: row.size,
+          capacity: row.capacity,
+          prepaid_value: row.prepaid_value,
+          original_product_price: row.original_product_price,
+          commission: row.commission,
+          total: row.total,
+          image_url: row.image_url
+        });
+      }
+    });
+
+    res.json({
+      message: "Order with details fetched successfully",
+      order
+    });
+  } catch (err) {
+    console.error("Get order with details error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
 
 
 // ✅ Unified update for orders + details

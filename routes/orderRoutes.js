@@ -10,7 +10,8 @@ import {
   updateOrderUnified,
   getOrdersCountByPosition,
   getOrdersCountByMonth,
-  getOrdersByPosition
+  getOrdersByPosition,
+  getOrderWithDetails
 } from "../controllers/orderController.js";
 
 
@@ -42,6 +43,8 @@ router.get(
   authMiddleware,
   getOrdersByPosition
 );
+
+router.get("/:id/with-details", authMiddleware, getOrderWithDetails);
 
 router.get("/stats/monthly", authMiddleware, getOrdersCountByMonth);
 
