@@ -101,7 +101,38 @@ export async function deleteOrderById(req, res) {
   }
 }
 
+export async function getOrdersCountByMonth(req, res) {
+  try {
+    const [rows] = await pool.query(`
+      SELECT 
+        DATE_FORMAT(created_at, '%Y-%m') AS month,
+        DAY(created_at) AS day,
+        COUNT(*) AS total_orders
+      FROM orders
+      GROUP BY DATE_FORMAT(created_at, '%Y-%m'), DAY(created_at)
+      ORDER BY month, day
+    `);
 
+    // إعادة ترتيب النتائج في JSON متداخل
+    const stats = {};
+    rows.forEach(row => {
+      if (!stats[row.month]) {
+        stats[row.month] = {};
+      }
+      stats[row.month][row.day] = row.total_orders;
+    });
+
+    res.json({
+      message: "Orders count per day in each month",
+      stats
+    });
+  } catch (err) {
+    console.error("Get orders count by day in month error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+/*
 export async function getOrdersCountByMonth(req, res) {
   try {
     const [rows] = await pool.query(`
@@ -122,17 +153,44 @@ export async function getOrdersCountByMonth(req, res) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
-
+*/
 // إنشاء طلب كامل
-export async function createFullOrder(req, res) {
-  const { creator_user_id, creator_customer_id, customer_id, collection_id, position_id, details } = req.body;
+// controllers/orderController.js
 
+
+export async function createFullOrder(req, res) {
+  const {
+    customer_id,
+    creator_user_id,
+    creator_customer_id,
+    collection_id,
+    position_id,
+    detail,     // الشكل الجديد
+    details     // دعم خلفي: سنسمح به فقط إذا كان فيه عنصر واحد
+  } = req.body;
+
+  // السماح بمصدر واحد للتفاصيل:
+  let resolvedDetail = detail;
+  if (!resolvedDetail && Array.isArray(details)) {
+    if (details.length === 1) {
+      resolvedDetail = details[0];
+    } else {
+      return res.status(400).json({ error: "Order must have exactly one detail" });
+    }
+  }
+
+  if (!resolvedDetail || typeof resolvedDetail !== "object") {
+    return res.status(400).json({ error: "A single 'detail' object is required" });
+  }
+
+  // منطق من ينشئ الطلب: إما user أو customer (واحد فقط)
   if ((creator_user_id && creator_customer_id) || (!creator_user_id && !creator_customer_id)) {
     return res.status(400).json({
-      error: "Order must be created by either a user OR a customer, not both"
+      error: "Order must be created by either a user OR a customer (exactly one)"
     });
   }
 
+  // لو User أنشأ الطلب لازم customer_id
   if (creator_user_id && !customer_id) {
     return res.status(400).json({
       error: "When a user creates an order, customer_id must be provided"
@@ -143,41 +201,35 @@ export async function createFullOrder(req, res) {
   try {
     await conn.beginTransaction();
 
-    const [orderResult] = await conn.query(createOrder, [
-      creator_user_id || null,
-      creator_customer_id || null,
-      customer_id || null,
-      collection_id || null,
-      position_id
-    ]);
+    // 1) إدخال الطلب
+    const [orderResult] = await conn.query(
+      `INSERT INTO orders (customer_id, creator_user_id, creator_customer_id, collection_id, position_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [customer_id || null, creator_user_id || null, creator_customer_id || null, collection_id || null, position_id]
+    );
     const orderId = orderResult.insertId;
 
-    if (details && details.length > 0) {
-      const values = details.map(d => [
+    // 2) إدخال «تفصيلة» واحدة فقط
+    await conn.query(
+      `INSERT INTO order_details
+       (order_id, title, description, notes, color, size, capacity,
+        prepaid_value, original_product_price, commission, total, image_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
         orderId,
-        d.image_url || null,
-        d.title,
-        d.description || null,
-        d.notes || null,
-        d.color || null,
-        d.size || null,
-        d.capacity || null,
-        d.prepaid_value || 0,
-        d.original_product_price || 0,
-        d.commission || 0,
-        d.total || 0
-      ]);
-      await conn.query(insertOrderDetails, [values]);
-    }
-
-    // ✅ سجل النشاط
-    await logOrderActivity({
-      orderId,
-      actionType: "CREATE",
-      actorId: creator_user_id || creator_customer_id,
-      actorType: creator_user_id ? "user" : "customer",
-      newValue: JSON.stringify({ position_id, details })
-    });
+        resolvedDetail.title,
+        resolvedDetail.description || null,
+        resolvedDetail.notes || null,
+        resolvedDetail.color || null,
+        resolvedDetail.size || null,
+        resolvedDetail.capacity || null,
+        resolvedDetail.prepaid_value ?? 0,
+        resolvedDetail.original_product_price ?? 0,
+        resolvedDetail.commission ?? 0,
+        resolvedDetail.total ?? 0,
+        resolvedDetail.image_url || null
+      ]
+    );
 
     await conn.commit();
     res.status(201).json({ message: "Full order created successfully", orderId });
