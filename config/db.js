@@ -25,6 +25,7 @@ const pool = mysql.createPool({
   queueLimit: 0,
   ssl: {
     ca: fs.readFileSync(caPath),
+    rejectUnauthorized: true
   },
 });
 
