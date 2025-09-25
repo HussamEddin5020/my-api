@@ -11,7 +11,9 @@ import {
   getOrdersCountByPosition,
   getOrdersCountByMonth,
   getOrdersByPosition,
-  getOrderWithDetails
+  getOrderWithDetails,
+
+
 } from "../controllers/orderController.js";
 
 
@@ -49,4 +51,5 @@ router.get("/:id/with-details", authMiddleware, getOrderWithDetails);
 router.get("/stats/monthly", authMiddleware, getOrdersCountByMonth);
 
 router.get("/stats/by-position", authMiddleware, getOrdersCountByPosition);
+
 export default router;
