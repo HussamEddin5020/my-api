@@ -6,9 +6,17 @@ export async function getOrdersByCart(req, res) {
   const { cartId } = req.params;
   try {
     const [rows] = await pool.query(
-      `SELECT o.id, o.customer_id, o.creator_user_id, o.creator_customer_id,
-              o.collection_id, o.position_id, o.created_at
+      `SELECT o.id,
+              o.customer_id,
+              u.name AS customer_name,
+              o.creator_user_id,
+              o.creator_customer_id,
+              o.collection_id,
+              o.position_id,
+              o.created_at
        FROM orders o
+       JOIN customers c ON o.customer_id = c.id
+       JOIN users u ON c.user_id = u.id
        WHERE o.cart_id = ? AND o.position_id = 2`,
       [cartId]
     );
@@ -22,6 +30,7 @@ export async function getOrdersByCart(req, res) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
 
 // ✅ 2) إضافة Order إلى سلة
 export async function addOrderToCart(req, res) {
@@ -59,7 +68,7 @@ export async function addOrderToCart(req, res) {
   }
 }
 
-// ✅ 3) إزالة Order من السلة
+
 export async function removeOrderFromCart(req, res) {
   const { orderId } = req.params;
   const conn = await pool.getConnection();
@@ -99,3 +108,33 @@ export async function removeOrderFromCart(req, res) {
     conn.release();
   }
 }
+
+
+export async function getOrdersNotAssignedInCart(req, res) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT o.id,
+              o.customer_id,
+              u.name AS customer_name,
+              o.creator_user_id,
+              o.creator_customer_id,
+              o.collection_id,
+              o.position_id,
+              o.created_at
+       FROM orders o
+       JOIN customers c ON o.customer_id = c.id
+       JOIN users u ON c.user_id = u.id
+       WHERE o.cart_id IS NULL
+         AND o.position_id = 2`
+    );
+
+    res.json({
+      message: "Orders (not assigned in cart) fetched successfully",
+      orders: rows
+    });
+  } catch (err) {
+    console.error("Get orders not assigned in cart error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
