@@ -12,6 +12,7 @@ import orderCartRoutes from "./routes/orderCartRoutes.js";
 import shipmentRoutes from "./routes/shipmentRoutes.js";
 import boxRoutes from "./routes/boxRoutes.js";
 import companyRoutes from "./routes/companyRoutes.js";
+import invoiceRoutes from "./routes/invoiceRoutes.js";
 
 dotenv.config();
 
@@ -42,6 +43,7 @@ app.use("/api", authRoutes);
 app.use("/api", locationRoutes);
 app.use("/api/carts", cartRoutes);
 app.use("/api/orders", orderCartRoutes);
+app.use("/api/invoices", invoiceRoutes);
 // Root Test
 app.get("/", (req, res) => {
   res.send("Nazil API Service is running 🚀");
