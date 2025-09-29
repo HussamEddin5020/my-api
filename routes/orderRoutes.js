@@ -62,6 +62,6 @@ router.get("/position/:positionId", getOrdersByPositionID);
 router.post("/barcode", addOrUpdateOrderBarcode);
 
 // حذف باركود
-router.delete("/barcode", deleteOrderBarcode);
+router.delete("/barcode/:orderId", deleteOrderBarcode);
 
 export default router;

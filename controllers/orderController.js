@@ -576,9 +576,12 @@ export async function addOrUpdateOrderBarcode(req, res) {
   }
 }
 
-// ➋ حذف باركود حسب orderId
+
+
+// مسح الباركود من الطلب حسب orderId (من الرابط)
 export async function deleteOrderBarcode(req, res) {
-  const { orderId } = req.body;
+  const { orderId } = req.params;
+
 
   if (!orderId) {
     return res.status(400).json({ error: "orderId is required" });
@@ -595,11 +598,11 @@ export async function deleteOrderBarcode(req, res) {
     }
 
     res.json({
-      message: "Barcode deleted successfully",
+      message: "Barcode cleared successfully",
       orderId,
     });
   } catch (err) {
-    console.error("Delete barcode error:", err);
+    console.error("Clear barcode error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 }
