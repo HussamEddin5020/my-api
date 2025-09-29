@@ -543,3 +543,63 @@ export async function getOrdersByPositionID(req, res) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+
+
+// ➊ إضافة أو تحديث باركود حسب orderId
+export async function addOrUpdateOrderBarcode(req, res) {
+  const { orderId, barcode } = req.body;
+
+  if (!orderId || !barcode) {
+    return res.status(400).json({ error: "orderId and barcode are required" });
+  }
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE orders SET barcode = ? WHERE id = ?",
+      [barcode, orderId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json({
+      message: "Barcode added/updated successfully",
+      orderId,
+      barcode,
+    });
+  } catch (err) {
+    console.error("Add/Update barcode error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+// ➋ حذف باركود حسب orderId
+export async function deleteOrderBarcode(req, res) {
+  const { orderId } = req.body;
+
+  if (!orderId) {
+    return res.status(400).json({ error: "orderId is required" });
+  }
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE orders SET barcode = NULL WHERE id = ?",
+      [orderId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json({
+      message: "Barcode deleted successfully",
+      orderId,
+    });
+  } catch (err) {
+    console.error("Delete barcode error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}

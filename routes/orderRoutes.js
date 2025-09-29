@@ -12,7 +12,9 @@ import {
   getOrdersCountByMonth,
   getOrdersByPosition,
   getOrderWithDetails,
-  getOrdersByPositionID
+  getOrdersByPositionID,
+  addOrUpdateOrderBarcode,
+  deleteOrderBarcode
 
 
 } from "../controllers/orderController.js";
@@ -54,5 +56,12 @@ router.get("/stats/monthly", authMiddleware, getOrdersCountByMonth);
 router.get("/stats/by-position", authMiddleware, getOrdersCountByPosition);
 
 router.get("/position/:positionId", getOrdersByPositionID);
+
+
+// إضافة / تحديث باركود
+router.post("/barcode", addOrUpdateOrderBarcode);
+
+// حذف باركود
+router.delete("/barcode", deleteOrderBarcode);
 
 export default router;
