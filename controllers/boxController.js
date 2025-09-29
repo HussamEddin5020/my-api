@@ -112,7 +112,7 @@ export async function getOrdersByBox(req, res) {
        FROM orders o
        JOIN customers c ON o.customer_id = c.id
        JOIN users u ON c.user_id = u.id
-       WHERE o.box_id = ? AND o.position_id = 2`,
+       WHERE o.box_id = ? AND o.position_id = 3`,
       [boxId]
     );
 
