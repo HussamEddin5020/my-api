@@ -13,6 +13,7 @@ import shipmentRoutes from "./routes/shipmentRoutes.js";
 import boxRoutes from "./routes/boxRoutes.js";
 import companyRoutes from "./routes/companyRoutes.js";
 import invoiceRoutes from "./routes/invoiceRoutes.js";
+import shippingCompanyRoutes from "./routes/shippingCompanyRoutes.js";
 
 dotenv.config();
 
@@ -48,6 +49,12 @@ app.use("/api/invoices", invoiceRoutes);
 app.get("/", (req, res) => {
   res.send("Nazil API Service is running 🚀");
 });
+
+
+
+
+app.use("/api/shipping-companies", shippingCompanyRoutes);
+
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");

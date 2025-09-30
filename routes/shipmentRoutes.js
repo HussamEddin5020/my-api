@@ -1,15 +1,14 @@
 import express from "express";
-import { getShipments, addShipment, addShipmentImage } from "../controllers/shipmentController.js";
+import { addShipment, addShipmentImage, getShipments } from "../controllers/shipmentController.js";
 
 const router = express.Router();
 
-// GET كل الشحنات
-router.get("/", getShipments);
-
-// POST اضافة شحنة
+// إضافة شحنة جديدة (مع صور اختيارية)
 router.post("/", addShipment);
 
-// POST اضافة صورة للشحنة
+router.get("/", getShipments);
+
+// إضافة صورة لشحنة موجودة
 router.post("/image", addShipmentImage);
 
 export default router;
