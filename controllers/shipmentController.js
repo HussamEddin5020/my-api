@@ -4,7 +4,7 @@ import pool from "../config/db.js";
 export const getShipments = async (req, res) => {
   try {
     const [rows] = await pool.query(`
-      SELECT s.id, s.weight, b.name AS box_name, sc.company_name
+      SELECT s.id, s.weight, b.number AS box_number, sc.company_name
       FROM shipments s
       JOIN box b ON s.box_id = b.id
       JOIN shipping_companies sc ON s.company_id = sc.id
@@ -14,6 +14,7 @@ export const getShipments = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
 
 // اضافة شحنة جديدة
 export const addShipment = async (req, res) => {
