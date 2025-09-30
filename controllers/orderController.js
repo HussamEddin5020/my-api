@@ -606,3 +606,75 @@ export async function deleteOrderBarcode(req, res) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+
+
+// إضافة أو تحديث طريقة الشراء
+export async function addOrUpdatePurchaseMethod(req, res) {
+  const { orderId, purchaseMethod } = req.body;
+
+  if (!orderId || !purchaseMethod) {
+    return res.status(400).json({ error: "orderId and purchaseMethod are required" });
+  }
+
+  try {
+    const [result] = await pool.query(
+      "UPDATE orders SET purchase_method = ? WHERE id = ?",
+      [purchaseMethod, orderId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json({
+      message: "Purchase method added/updated successfully",
+      orderId,
+      purchaseMethod,
+    });
+  } catch (err) {
+    console.error("Add/Update purchase method error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+
+// تغيير position_id إلى 3 وفق الشروط
+export async function moveOrderToPosition3(req, res) {
+  const { orderId } = req.body;
+
+  if (!orderId) {
+    return res.status(400).json({ error: "orderId is required" });
+  }
+
+  try {
+    // تنفيذ التحديث مع الشروط
+    const [result] = await pool.query(
+      `UPDATE orders
+       SET position_id = 3
+       WHERE id = ?
+         AND cart_id IS NOT NULL
+         AND invoice_id IS NOT NULL
+         AND purchase_method IS NOT NULL
+         AND purchase_method <> ''
+         AND position_id = 2`,
+      [orderId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(400).json({
+        error: "Order does not meet the required conditions or not found",
+      });
+    }
+
+    res.json({
+      message: "Order moved to position_id = 3 successfully",
+      orderId,
+    });
+  } catch (err) {
+    console.error("Move order to position 3 error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+

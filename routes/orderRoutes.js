@@ -14,7 +14,9 @@ import {
   getOrderWithDetails,
   getOrdersByPositionID,
   addOrUpdateOrderBarcode,
-  deleteOrderBarcode
+  deleteOrderBarcode,
+  addOrUpdatePurchaseMethod,
+  moveOrderToPosition3
 
 
 } from "../controllers/orderController.js";
@@ -63,5 +65,9 @@ router.post("/barcode", addOrUpdateOrderBarcode);
 
 // حذف باركود
 router.delete("/barcode/:orderId", deleteOrderBarcode);
+
+router.post("/purchase-method", addOrUpdatePurchaseMethod);
+
+router.post("/move-to-pos3", moveOrderToPosition3);
 
 export default router;
