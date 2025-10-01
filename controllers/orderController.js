@@ -678,3 +678,132 @@ export async function moveOrderToPosition3(req, res) {
   }
 }
 
+
+export async function moveOrderToPosition4(req, res) {
+  const { shipmentId } = req.params;
+
+  if (!shipmentId) {
+    return res.status(400).json({ error: "shipmentId is required" });
+  }
+
+  try {
+    // 1) جلب بيانات الشحنة والتحقق من استيفاء الشروط
+    const [rows] = await pool.query(
+      `SELECT box_id, company_id, sender_name, weight
+       FROM shipments
+       WHERE id = ?`,
+      [shipmentId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: "Shipment not found" });
+    }
+
+    const { box_id, company_id, sender_name, weight } = rows[0];
+
+    if (
+      box_id == null ||
+      company_id == null ||
+      weight == null ||
+      sender_name == null ||
+      String(sender_name).trim() === ""
+    ) {
+      return res.status(400).json({
+        error:
+          "Shipment is missing required details (box_id, company_id, sender_name, weight)."
+      });
+    }
+
+    // 2) تحديث الطلبات المرتبطة بنفس الـ box إلى الحالة 4 بشرط أن تكون حالتها الحالية 3
+    const [upd] = await pool.query(
+      `UPDATE orders
+       SET position_id = 4
+       WHERE box_id = ?
+         AND position_id = 3`,
+      [box_id]
+    );
+
+    if (upd.affectedRows === 0) {
+      return res.status(400).json({
+        error:
+          "No orders were moved. Make sure there are orders with this box_id and position_id = 3."
+      });
+    }
+
+    return res.json({
+      message: "Orders moved to position_id = 4 successfully",
+      shipmentId,
+      box_id,
+      affected_orders: upd.affectedRows
+    });
+  } catch (err) {
+    console.error("moveOrderToPosition4 error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+
+export async function getPos3OrdersNotReady(req, res) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT o.id,
+              o.customer_id,
+              u.name AS customer_name,
+              o.creator_user_id,
+              o.creator_customer_id,
+              o.collection_id,
+              o.position_id,
+              o.box_id,
+              o.barcode,
+              o.created_at
+       FROM orders o
+       JOIN customers c ON o.customer_id = c.id
+       JOIN users u     ON c.user_id     = u.id
+       WHERE o.position_id = 3
+         AND ( (o.barcode IS NULL OR o.barcode = '') OR o.box_id IS NULL )
+       ORDER BY o.created_at DESC`
+    );
+
+    res.json({
+      message: "POS=3 (not ready) orders fetched successfully",
+      orders: rows
+    });
+  } catch (err) {
+    console.error("getPos3OrdersNotReady error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+// جاهزة: position=3 وبها باركود وصندوق معًا
+export async function getPos3OrdersReady(req, res) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT o.id,
+              o.customer_id,
+              u.name AS customer_name,
+              o.creator_user_id,
+              o.creator_customer_id,
+              o.collection_id,
+              o.position_id,
+              o.box_id,
+              o.barcode,
+              o.created_at
+       FROM orders o
+       JOIN customers c ON o.customer_id = c.id
+       JOIN users u     ON c.user_id     = u.id
+       WHERE o.position_id = 3
+         AND o.box_id IS NOT NULL
+         AND o.barcode IS NOT NULL
+         AND o.barcode <> ''
+       ORDER BY o.created_at DESC`
+    );
+
+    res.json({
+      message: "POS=3 (ready) orders fetched successfully",
+      orders: rows
+    });
+  } catch (err) {
+    console.error("getPos3OrdersReady error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}

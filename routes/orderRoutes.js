@@ -16,8 +16,10 @@ import {
   addOrUpdateOrderBarcode,
   deleteOrderBarcode,
   addOrUpdatePurchaseMethod,
-  moveOrderToPosition3
-
+  moveOrderToPosition3,
+  moveOrderToPosition4,
+  getPos3OrdersNotReady,
+  getPos3OrdersReady
 
 } from "../controllers/orderController.js";
 
@@ -69,5 +71,14 @@ router.delete("/barcode/:orderId", deleteOrderBarcode);
 router.post("/purchase-method", addOrUpdatePurchaseMethod);
 
 router.post("/move-to-pos3", moveOrderToPosition3);
+
+router.post("/move-to-pos4/:shipmentId", moveOrderToPosition4);
+
+
+// غير جاهزة
+router.get("/pos3/not-ready", getPos3OrdersNotReady);
+
+// جاهزة
+router.get("/pos3/ready", getPos3OrdersReady);
 
 export default router;
