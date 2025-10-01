@@ -746,7 +746,7 @@ export async function moveOrderToPosition4(req, res) {
 export async function getPos3OrdersNotReady(req, res) {
   try {
     const [rows] = await pool.query(
-      `SELECT o.id,
+      `SELECT o.id AS order_id,
               o.customer_id,
               u.name AS customer_name,
               o.creator_user_id,
@@ -778,7 +778,7 @@ export async function getPos3OrdersNotReady(req, res) {
 export async function getPos3OrdersReady(req, res) {
   try {
     const [rows] = await pool.query(
-      `SELECT o.id,
+      `SELECT o.id AS order_id,
               o.customer_id,
               u.name AS customer_name,
               o.creator_user_id,
