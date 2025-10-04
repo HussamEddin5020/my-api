@@ -155,3 +155,44 @@ export async function getOrdersNotAssignedInBox(req, res) {
   }
 }
 
+
+
+export async function getUnavailableBoxes(req, res) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, number, orders_count, is_available
+       FROM box
+       WHERE is_available = 0
+       ORDER BY id DESC`
+    );
+
+    res.json({
+      message: "Unavailable boxes fetched successfully",
+      boxes: rows
+    });
+  } catch (err) {
+    console.error("Get unavailable boxes error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+
+export async function getAvailableBoxes(req, res) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, number, orders_count, is_available
+       FROM box
+       WHERE is_available = 1
+       ORDER BY id DESC`
+    );
+
+    res.json({
+      message: "Available boxes fetched successfully",
+      boxes: rows
+    });
+  } catch (err) {
+    console.error("Get available boxes error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
