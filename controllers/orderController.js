@@ -853,3 +853,29 @@ export async function moveOrdersPos4To5ByBox(req, res) {
     return res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+export async function getOrderCartId(req, res) {
+  const { orderId } = req.params;
+
+  if (!orderId || Number.isNaN(Number(orderId))) {
+    return res.status(400).json({ error: "Valid orderId is required" });
+  }
+
+  try {
+    const [[row]] = await pool.query(
+      "SELECT cart_id FROM orders WHERE id = ?",
+      [orderId]
+    );
+
+    if (!row) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // يرجّع cart_id فقط (قد يكون null)
+    return res.json({ cart_id: row.cart_id });
+  } catch (err) {
+    console.error("getOrderCartId error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
