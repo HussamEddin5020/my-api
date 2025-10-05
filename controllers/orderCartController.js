@@ -17,7 +17,7 @@ export async function getOrdersByCart(req, res) {
        FROM orders o
        JOIN customers c ON o.customer_id = c.id
        JOIN users u ON c.user_id = u.id
-       WHERE o.cart_id = ? AND o.position_id = 2`,
+       WHERE o.cart_id = ?`,
       [cartId]
     );
 
