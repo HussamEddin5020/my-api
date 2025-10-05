@@ -9,6 +9,6 @@ router.put("/:id/increment", incrementCart); // زيادة orders_count
 router.post("/", createCart);
 router.get("/:cartId/orders", getOrdersByCartId);
 // تغيير حالة السلة إلى غير متاحة (0)
-router.patch("/:cartId/unavailable", setCartUnavailable);
+router.post("/:cartId/unavailable", setCartUnavailable);
 
 export default router;
