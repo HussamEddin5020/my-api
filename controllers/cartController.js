@@ -146,3 +146,23 @@ export async function setCartUnavailable(req, res) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+export async function getUnavailableCarts(req, res) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, orders_count, is_available
+       FROM cart
+       WHERE is_available = 0
+       ORDER BY id DESC`
+    );
+
+    res.json({
+      message: "Unavailable carts fetched successfully",
+      carts: rows
+    });
+  } catch (err) {
+    console.error("Get unavailable carts error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
