@@ -654,7 +654,6 @@ export async function moveOrderToPosition3(req, res) {
       `UPDATE orders
        SET position_id = 3
        WHERE id = ?
-         AND cart_id IS NOT NULL
          AND invoice_id IS NOT NULL
          AND purchase_method IS NOT NULL
          AND purchase_method <> ''
