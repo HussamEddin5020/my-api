@@ -25,7 +25,7 @@ export async function createCart(req, res) {
 export async function getAllCarts(req, res) {
   try {
     const [rows] = await pool.query(
-      `SELECT id, orders_count FROM cart ORDER BY id`
+      `SELECT * FROM cart ORDER BY id`
     );
     res.json({
       message: "Carts fetched successfully",
@@ -53,6 +53,47 @@ export async function incrementCart(req, res) {
     res.json({ message: `Cart ${id} incremented successfully` });
   } catch (err) {
     console.error("Increment cart error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+
+
+// GET /api/carts/:cartId/orders  → جلب الطلبات بحسب Cart ID
+export async function getOrdersByCartId(req, res) {
+  const { cartId } = req.params;
+
+  if (!cartId || Number.isNaN(Number(cartId))) {
+    return res.status(400).json({ error: "Valid cartId is required" });
+  }
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT 
+          o.id AS order_id,
+          o.customer_id,
+          u.name AS customer_name,
+          o.creator_user_id,
+          o.creator_customer_id,
+          o.collection_id,
+          o.position_id,
+          o.box_id,
+          o.barcode,
+          o.created_at
+       FROM orders o
+       JOIN customers c ON o.customer_id = c.id
+       JOIN users u     ON c.user_id     = u.id
+       WHERE o.cart_id = ?
+       ORDER BY o.created_at DESC`,
+      [cartId]
+    );
+
+    res.json({
+      message: "Orders by cart fetched successfully",
+      orders: rows
+    });
+  } catch (err) {
+    console.error("Get orders by cart error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 }

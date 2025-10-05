@@ -807,3 +807,50 @@ export async function getPos3OrdersReady(req, res) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+export async function moveOrdersPos4To5ByBox(req, res) {
+  const { boxId } = req.params;
+
+  if (!boxId) {
+    return res.status(400).json({ error: "boxId is required" });
+  }
+
+  try {
+    // 1) تحقق من الصندوق وأنه غير متاح
+    const [boxRows] = await pool.query(
+      "SELECT id, is_available FROM box WHERE id = ?",
+      [boxId]
+    );
+
+    if (boxRows.length === 0) {
+      return res.status(404).json({ error: "Box not found" });
+    }
+    if (boxRows[0].is_available !== 0) {
+      return res
+        .status(400)
+        .json({ error: "Box must be unavailable (is_available = 0) to move orders" });
+    }
+
+    // 2) حدث الطلبات: position_id 4 → 5 إذا كانت مرتبطة بهذا الصندوق
+    const [result] = await pool.query(
+      `
+      UPDATE orders o
+      JOIN box b ON o.box_id = b.id
+      SET o.position_id = 5
+      WHERE o.box_id = ?
+        AND o.position_id = 4
+        AND b.is_available = 0
+      `,
+      [boxId]
+    );
+
+    return res.json({
+      message: "Orders moved from position_id 4 to 5 successfully",
+      boxId: Number(boxId),
+      moved_count: result.affectedRows
+    });
+  } catch (err) {
+    console.error("moveOrdersPos4To5ByBox error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}

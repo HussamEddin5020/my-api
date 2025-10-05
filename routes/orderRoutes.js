@@ -19,7 +19,8 @@ import {
   moveOrderToPosition3,
   moveOrderToPosition4,
   getPos3OrdersNotReady,
-  getPos3OrdersReady
+  getPos3OrdersReady,
+  moveOrdersPos4To5ByBox
 
 } from "../controllers/orderController.js";
 
@@ -80,5 +81,7 @@ router.get("/pos3/not-ready", getPos3OrdersNotReady);
 
 // جاهزة
 router.get("/pos3/ready", getPos3OrdersReady);
+
+router.post("/box/:boxId/move-4-to-5", moveOrdersPos4To5ByBox);
 
 export default router;
