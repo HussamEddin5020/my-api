@@ -468,6 +468,8 @@ export async function updateOrderUnified(req, res) {
 
 
 
+
+
 // Orders with position_id = 2 AND is_archived = 1
 export async function getArchivedPos2Orders(req, res) {
   try {
@@ -478,6 +480,12 @@ export async function getArchivedPos2Orders(req, res) {
           d.title,
           d.prepaid_value,
           d.total,
+
+          -- الإضافات الجديدة
+          o.purchase_method,
+          o.invoice_id,
+          pi.invoice_image_base64 AS invoice_base64,
+
           p.name AS position_name,
           CASE
               WHEN o.creator_user_id IS NOT NULL 
@@ -494,8 +502,9 @@ export async function getArchivedPos2Orders(req, res) {
            JOIN users u3 ON c3.user_id = u3.id
            WHERE c3.id = o.customer_id) AS customer_name
       FROM orders o
-      JOIN order_position p ON o.position_id = p.id
+      JOIN order_position p   ON o.position_id = p.id
       LEFT JOIN order_details d ON d.order_id = o.id
+      LEFT JOIN purchase_invoices pi ON pi.id = o.invoice_id
       WHERE o.position_id = 2
         AND o.is_archived = 1
       ORDER BY o.created_at DESC
@@ -522,6 +531,12 @@ export async function getUnarchivedPos2Orders(req, res) {
           d.title,
           d.prepaid_value,
           d.total,
+
+          -- الإضافات الجديدة
+          o.purchase_method,
+          o.invoice_id,
+          pi.invoice_image_base64 AS invoice_base64,
+
           p.name AS position_name,
           CASE
               WHEN o.creator_user_id IS NOT NULL 
@@ -538,8 +553,9 @@ export async function getUnarchivedPos2Orders(req, res) {
            JOIN users u3 ON c3.user_id = u3.id
            WHERE c3.id = o.customer_id) AS customer_name
       FROM orders o
-      JOIN order_position p ON o.position_id = p.id
-      LEFT JOIN order_details d ON d.order_id = o.id
+      JOIN order_position p   ON o.position_id = p.id
+      LEFT JOiN order_details d ON d.order_id = o.id
+      LEFT JOIN purchase_invoices pi ON pi.id = o.invoice_id
       WHERE o.position_id = 2
         AND o.is_archived = 0
       ORDER BY o.created_at DESC
