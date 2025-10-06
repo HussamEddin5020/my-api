@@ -576,6 +576,175 @@ export async function getUnarchivedPos2Orders(req, res) {
 
 
 
+
+/** helper: يرجّع purchase_method + invoice_base64 */
+async function fetchOrderWithInvoice(orderId) {
+  const [rows] = await pool.query(
+    `SELECT
+        o.id AS order_id,
+        o.cart_id,
+        o.is_archived,
+        o.purchase_method,
+        o.invoice_id,
+        pi.invoice_image_base64 AS invoice_base64
+     FROM orders o
+     LEFT JOIN purchase_invoices pi ON pi.id = o.invoice_id
+     WHERE o.id = ?`,
+    [orderId]
+  );
+  return rows[0] || null;
+}
+
+/**
+ * PATCH /api/orders/pos2/archived/:id
+ * يحدّث طلب مؤرشف (position_id=2 & is_archived=1)
+ * الحقول المسموح بها (كلها اختيارية): 
+ *   cart_id, invoice_id, purchase_method, barcode, box_id, collection_id,
+ *   customer_id, creator_user_id, creator_customer_id
+ * ملاحظة: لو تم تمرير cart_id = null ⇒ يُحوَّل is_archived = 0 تلقائيًا
+ */
+export async function updateArchivedPos2Order(req, res) {
+  const { id } = req.params;
+  if (!id || Number.isNaN(Number(id))) {
+    return res.status(400).json({ error: "Valid order id is required" });
+  }
+
+  // الحقول المسموح تحديثها
+  const allowed = [
+    "cart_id","invoice_id","purchase_method","barcode","box_id","collection_id",
+    "customer_id","creator_user_id","creator_customer_id"
+  ];
+
+  const sets = [];
+  const vals = [];
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+      sets.push(`${key} = ?`);
+      // نعالج سلاسل فارغة لتصبح NULL (اختياريًا مفيد)
+      const v = req.body[key];
+      vals.push(v === "" ? null : v);
+    }
+  }
+  if (sets.length === 0) {
+    return res.status(400).json({ error: "No fields provided to update" });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // تأكيد الحالة: position_id=2 & is_archived=1
+    const [[found]] = await conn.query(
+      `SELECT id, position_id, is_archived, cart_id
+       FROM orders
+       WHERE id = ? AND position_id = 2 AND is_archived = 1
+       FOR UPDATE`,
+      [id]
+    );
+    if (!found) {
+      await conn.rollback(); conn.release();
+      return res.status(404).json({ error: "Archived pos=2 order not found" });
+    }
+
+    // تنفيذ التحديث الجزئي
+    await conn.query(`UPDATE orders SET ${sets.join(", ")} WHERE id = ?`, [...vals, id]);
+
+    // منطق إلغاء الأرشفة إذا أُرسِل cart_id = null صراحةً
+    let becameUnarchived = false;
+    if (Object.prototype.hasOwnProperty.call(req.body, "cart_id") && req.body.cart_id == null) {
+      await conn.query(`UPDATE orders SET is_archived = 0 WHERE id = ?`, [id]);
+      becameUnarchived = true;
+    }
+
+    await conn.commit();
+
+    const details = await fetchOrderWithInvoice(id);
+    conn.release();
+    return res.json({
+      message: becameUnarchived
+        ? "Archived order updated and unarchived due to NULL cart_id"
+        : "Archived pos=2 order updated successfully",
+      order_id: Number(id),
+      is_archived: becameUnarchived ? 0 : 1,
+      purchase_method: details?.purchase_method ?? null,
+      invoice: details?.invoice_id
+        ? { invoice_id: details.invoice_id, invoice_base64: details.invoice_base64 ?? null }
+        : null
+    });
+  } catch (err) {
+    try { await conn.rollback(); } catch {}
+    conn.release();
+    console.error("updateArchivedPos2Order error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+/**
+ * PATCH /api/orders/pos2/unarchived/:id
+ * يحدّث طلب غير مؤرشف (position_id=2 & is_archived=0)
+ * نفس الحقول المسموح بها أعلاه. لا منطق خاص هنا.
+ */
+export async function updateUnarchivedPos2Order(req, res) {
+  const { id } = req.params;
+  if (!id || Number.isNaN(Number(id))) {
+    return res.status(400).json({ error: "Valid order id is required" });
+  }
+
+  const allowed = [
+    "cart_id","invoice_id","purchase_method","barcode","box_id","collection_id",
+    "customer_id","creator_user_id","creator_customer_id"
+  ];
+  const sets = [];
+  const vals = [];
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+      sets.push(`${key} = ?`);
+      const v = req.body[key];
+      vals.push(v === "" ? null : v);
+    }
+  }
+  if (sets.length === 0) {
+    return res.status(400).json({ error: "No fields provided to update" });
+  }
+
+  try {
+    // تأكيد الحالة: position_id=2 & is_archived=0
+    const [check] = await pool.query(
+      `SELECT id FROM orders WHERE id = ? AND position_id = 2 AND is_archived = 0`,
+      [id]
+    );
+    if (check.length === 0) {
+      return res.status(404).json({ error: "Unarchived pos=2 order not found" });
+    }
+
+    const [upd] = await pool.query(
+      `UPDATE orders SET ${sets.join(", ")} WHERE id = ?`,
+      [...vals, id]
+    );
+    if (upd.affectedRows === 0) {
+      return res.status(500).json({ error: "Failed to update order" });
+    }
+
+    const details = await fetchOrderWithInvoice(id);
+    return res.json({
+      message: "Unarchived pos=2 order updated successfully",
+      order_id: Number(id),
+      is_archived: details?.is_archived ?? 0,
+      purchase_method: details?.purchase_method ?? null,
+      invoice: details?.invoice_id
+        ? { invoice_id: details.invoice_id, invoice_base64: details.invoice_base64 ?? null }
+        : null
+    });
+  } catch (err) {
+    console.error("updateUnarchivedPos2Order error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+
+
+
+
 export async function getOrdersByPositionID(req, res) {
   const { positionId } = req.params; // نقرأ البارامتر من الراوت
   try {
