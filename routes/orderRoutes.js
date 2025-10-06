@@ -10,7 +10,6 @@ import {
   updateOrderUnified,
   getOrdersCountByPosition,
   getOrdersCountByMonth,
-  getOrdersByPosition,
   getOrderWithDetails,
   getOrdersByPositionID,
   addOrUpdateOrderBarcode,
@@ -21,7 +20,10 @@ import {
   getPos3OrdersNotReady,
   getPos3OrdersReady,
   moveOrdersPos4To5ByBox,
-  getOrderCartId
+  getOrderCartId,
+  getArchivedPos2Orders,
+  getUnarchivedPos2Orders
+  
 
 } from "../controllers/orderController.js";
 
@@ -49,11 +51,7 @@ router.put(
   updateOrderUnified                    // يستخدم unified
 );
 
-router.get(
-  "/by-position/:positionId",
-  authMiddleware,
-  getOrdersByPosition
-);
+
 
 router.get("/:id/with-details", authMiddleware, getOrderWithDetails);
 
@@ -86,5 +84,12 @@ router.get("/pos3/ready", getPos3OrdersReady);
 router.post("/box/:boxId/move-4-to-5", moveOrdersPos4To5ByBox);
 
 router.get("/:orderId/cart-id", getOrderCartId);
+
+
+// المؤرشفة (position_id=2 & is_archived=1)
+router.get("/pos2/archived", getArchivedPos2Orders);
+
+// غير المؤرشفة (position_id=2 & is_archived=0)
+router.get("/pos2/unarchived", getUnarchivedPos2Orders);
 
 export default router;

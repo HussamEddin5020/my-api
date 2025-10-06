@@ -466,9 +466,10 @@ export async function updateOrderUnified(req, res) {
   }
 }
 
-export async function getOrdersByPosition(req, res) {
-  const { positionId } = req.params;
 
+
+// Orders with position_id = 2 AND is_archived = 1
+export async function getArchivedPos2Orders(req, res) {
   try {
     const [rows] = await pool.query(
       `
@@ -495,21 +496,66 @@ export async function getOrdersByPosition(req, res) {
       FROM orders o
       JOIN order_position p ON o.position_id = p.id
       LEFT JOIN order_details d ON d.order_id = o.id
-      WHERE o.position_id = ?
-      `,
-      [positionId]
+      WHERE o.position_id = 2
+        AND o.is_archived = 1
+      ORDER BY o.created_at DESC
+      `
     );
 
     res.json({
-      message: "Orders fetched successfully",
-      positionId,
+      message: "Archived position=2 orders fetched successfully",
       orders: rows
     });
   } catch (err) {
-    console.error("Get orders by position error:", err);
+    console.error("getArchivedPos2Orders error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+// Orders with position_id = 2 AND is_archived = 0
+export async function getUnarchivedPos2Orders(req, res) {
+  try {
+    const [rows] = await pool.query(
+      `
+      SELECT 
+          o.id AS order_id,
+          d.title,
+          d.prepaid_value,
+          d.total,
+          p.name AS position_name,
+          CASE
+              WHEN o.creator_user_id IS NOT NULL 
+                   THEN (SELECT u.name FROM users u WHERE u.id = o.creator_user_id)
+              WHEN o.creator_customer_id IS NOT NULL 
+                   THEN (SELECT u2.name 
+                         FROM customers c2 
+                         JOIN users u2 ON c2.user_id = u2.id
+                         WHERE c2.id = o.creator_customer_id)
+              ELSE NULL
+          END AS created_by_name,
+          (SELECT u3.name 
+           FROM customers c3 
+           JOIN users u3 ON c3.user_id = u3.id
+           WHERE c3.id = o.customer_id) AS customer_name
+      FROM orders o
+      JOIN order_position p ON o.position_id = p.id
+      LEFT JOIN order_details d ON d.order_id = o.id
+      WHERE o.position_id = 2
+        AND o.is_archived = 0
+      ORDER BY o.created_at DESC
+      `
+    );
+
+    res.json({
+      message: "Unarchived position=2 orders fetched successfully",
+      orders: rows
+    });
+  } catch (err) {
+    console.error("getUnarchivedPos2Orders error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
 
 
 
