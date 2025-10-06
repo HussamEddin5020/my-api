@@ -104,9 +104,9 @@ router.post("/:id/archive", archiveOrder);
 // POST /api/orders/:id/unarchive   → is_archived = 0
 router.post("/:id/unarchive", unarchiveOrder);
 
-router.patch("/pos2/archived/:id", updateArchivedPos2Order);
+router.post("/pos2/archived/:id", updateArchivedPos2Order);
 
 // تحديث طلب غير مؤرشف (pos=2 & archived=0)
-router.patch("/pos2/unarchived/:id", updateUnarchivedPos2Order);
+router.post("/pos2/unarchived/:id", updateUnarchivedPos2Order);
 
 export default router;
