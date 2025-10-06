@@ -22,7 +22,9 @@ import {
   moveOrdersPos4To5ByBox,
   getOrderCartId,
   getArchivedPos2Orders,
-  getUnarchivedPos2Orders
+  getUnarchivedPos2Orders,
+  unarchiveOrder,
+  archiveOrder
   
 
 } from "../controllers/orderController.js";
@@ -91,5 +93,12 @@ router.get("/pos2/archived", getArchivedPos2Orders);
 
 // غير المؤرشفة (position_id=2 & is_archived=0)
 router.get("/pos2/unarchived", getUnarchivedPos2Orders);
+
+
+// POST /api/orders/:id/archive     → is_archived = 1
+router.post("/:id/archive", archiveOrder);
+
+// POST /api/orders/:id/unarchive   → is_archived = 0
+router.post("/:id/unarchive", unarchiveOrder);
 
 export default router;

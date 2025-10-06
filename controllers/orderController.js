@@ -925,3 +925,59 @@ export async function getOrderCartId(req, res) {
     return res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+
+
+// جعل الطلب مؤرشفًا (is_archived = 1)
+export async function archiveOrder(req, res) {
+  const { id } = req.params;
+  if (!id || Number.isNaN(Number(id))) {
+    return res.status(400).json({ error: "Valid order id is required" });
+  }
+
+  try {
+    // (اختياري) تحقق من وجود الطلب وحالته الحالية
+    const [[row]] = await pool.query("SELECT id, is_archived FROM orders WHERE id = ?", [id]);
+    if (!row) return res.status(404).json({ error: "Order not found" });
+    if (row.is_archived === 1) {
+      return res.json({ message: "Order already archived", order_id: Number(id), is_archived: 1 });
+    }
+
+    const [result] = await pool.query("UPDATE orders SET is_archived = 1 WHERE id = ?", [id]);
+    if (result.affectedRows === 0) {
+      return res.status(500).json({ error: "Failed to archive order" });
+    }
+
+    return res.json({ message: "Order archived successfully", order_id: Number(id), is_archived: 1 });
+  } catch (err) {
+    console.error("archiveOrder error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+// إلغاء الأرشفة (is_archived = 0)
+export async function unarchiveOrder(req, res) {
+  const { id } = req.params;
+  if (!id || Number.isNaN(Number(id))) {
+    return res.status(400).json({ error: "Valid order id is required" });
+  }
+
+  try {
+    const [[row]] = await pool.query("SELECT id, is_archived FROM orders WHERE id = ?", [id]);
+    if (!row) return res.status(404).json({ error: "Order not found" });
+    if (row.is_archived === 0) {
+      return res.json({ message: "Order already unarchived", order_id: Number(id), is_archived: 0 });
+    }
+
+    const [result] = await pool.query("UPDATE orders SET is_archived = 0 WHERE id = ?", [id]);
+    if (result.affectedRows === 0) {
+      return res.status(500).json({ error: "Failed to unarchive order" });
+    }
+
+    return res.json({ message: "Order unarchived successfully", order_id: Number(id), is_archived: 0 });
+  } catch (err) {
+    console.error("unarchiveOrder error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
