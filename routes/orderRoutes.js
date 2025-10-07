@@ -27,7 +27,8 @@ import {
   archiveOrder,
   updateArchivedPos2Order,
   updateUnarchivedPos2Order,
-  applyPurchaseToOrder
+  applyPurchaseToOrder,
+  replacePurchaseForOrder
 
   
 
@@ -111,5 +112,6 @@ router.post("/pos2/archived/:id/update", updateArchivedPos2Order);
 router.post("/pos2/unarchived/:id/update", updateUnarchivedPos2Order);
 
 router.post("/:orderId/apply-purchase", applyPurchaseToOrder);
+router.post("/:orderId/replace-purchase", replacePurchaseForOrder);
 
 export default router;
