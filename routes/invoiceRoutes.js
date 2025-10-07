@@ -1,5 +1,5 @@
 import express from "express";
-import { addPurchaseInvoice, getInvoiceByOrder } from "../controllers/invoiceController.js";
+import { addPurchaseInvoice, getInvoiceByOrder, replaceOrderInvoice } from "../controllers/invoiceController.js";
 
 const router = express.Router();
 
@@ -8,5 +8,9 @@ router.post("/", addPurchaseInvoice);
 
 // جلب الفاتورة حسب orderId
 router.get("/:orderId", getInvoiceByOrder);
+
+
+// استبدال فاتورة طلب (يحذف القديمة ثم يضيف الجديدة)
+router.post("/orders/:orderId/invoice/replace", replaceOrderInvoice);
 
 export default router;

@@ -26,7 +26,8 @@ import {
   unarchiveOrder,
   archiveOrder,
   updateArchivedPos2Order,
-  updateUnarchivedPos2Order
+  updateUnarchivedPos2Order,
+  applyPurchaseToOrder
 
   
 
@@ -108,5 +109,7 @@ router.post("/pos2/archived/:id/update", updateArchivedPos2Order);
 
 // تحديث طلب غير مؤرشف (pos=2 & archived=0)
 router.post("/pos2/unarchived/:id/update", updateUnarchivedPos2Order);
+
+router.post("/:orderId/apply-purchase", applyPurchaseToOrder);
 
 export default router;

@@ -1166,3 +1166,78 @@ export async function unarchiveOrder(req, res) {
     return res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+export async function applyPurchaseToOrder(req, res) {
+  const { orderId } = req.params;
+  const { purchase_method, invoice_base64, cart_id } = req.body || {};
+
+  // تحقق من المدخلات الأساسية
+  if (!orderId || Number.isNaN(Number(orderId))) {
+    return res.status(400).json({ error: "Valid orderId is required" });
+  }
+  if (!purchase_method || typeof purchase_method !== "string") {
+    return res.status(400).json({ error: "purchase_method is required (string)" });
+  }
+  if (!invoice_base64 || typeof invoice_base64 !== "string" || invoice_base64.trim() === "") {
+    return res.status(400).json({ error: "invoice_base64 is required (non-empty string)" });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) تأكيد وجود الطلب وقفل صفّه
+    const [[order]] = await conn.query(
+      `SELECT id FROM orders WHERE id = ? FOR UPDATE`,
+      [orderId]
+    );
+    if (!order) {
+      await conn.rollback(); conn.release();
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // 2) إدراج الفاتورة في purchase_invoices
+    const [ins] = await conn.query(
+      `INSERT INTO purchase_invoices (invoice_image_base64) VALUES (?)`,
+      [invoice_base64]
+    );
+    const newInvoiceId = ins.insertId;
+
+    // 3) تحديث الطلب: purchase_method + invoice_id (+ cart_id إن أُرسل)
+    const sets = [`purchase_method = ?`, `invoice_id = ?`];
+    const vals = [purchase_method, newInvoiceId];
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "cart_id")) {
+      // تم إرسال cart_id صراحةً (حتى لو null)
+      sets.push(`cart_id = ?`);
+      vals.push(cart_id ?? null);
+    }
+
+    const [upd] = await conn.query(
+      `UPDATE orders SET ${sets.join(", ")} WHERE id = ?`,
+      [...vals, orderId]
+    );
+    if (upd.affectedRows === 0) {
+      throw new Error("Failed to update order");
+    }
+
+    await conn.commit();
+    conn.release();
+
+    return res.json({
+      message: "Purchase applied and invoice linked successfully",
+      order_id: Number(orderId),
+      purchase_method,
+      invoice_id: newInvoiceId,
+      cart_id: Object.prototype.hasOwnProperty.call(req.body || {}, "cart_id")
+        ? (cart_id ?? null)
+        : undefined
+    });
+  } catch (err) {
+    try { await conn.rollback(); } catch {}
+    conn.release();
+    console.error("applyPurchaseToOrder error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
