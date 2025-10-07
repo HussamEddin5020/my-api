@@ -1397,44 +1397,44 @@ export async function replacePurchaseForOrder(req, res) {
 
 
 
-
-// POST /api/orders/:id/pos3-to-2
-export async function moveOrderPos3To2(req, res) {
+export async function unarchiveOrderStrict(req, res) {
   const { id } = req.params;
   if (!id || Number.isNaN(Number(id))) {
     return res.status(400).json({ error: "Valid order id is required" });
   }
 
   try {
-    // غيّر الحالة إلى 2 وامسح الأرشفة في عملية واحدة
+    // غيّر is_archived إلى 0 فقط إذا كان حاليًا 1
     const [upd] = await pool.query(
-      "UPDATE orders SET position_id = 2, is_archived = 0 WHERE id = ? AND position_id = 3",
+      "UPDATE orders SET is_archived = 0 WHERE id = ? AND is_archived = 1",
       [id]
     );
 
     if (upd.affectedRows === 0) {
+      // إمّا الطلب غير موجود أو أنه أصلًا غير مؤرشف
       const [[row]] = await pool.query(
-        "SELECT id, position_id, is_archived FROM orders WHERE id = ?",
+        "SELECT id, is_archived FROM orders WHERE id = ?",
         [id]
       );
       if (!row) return res.status(404).json({ error: "Order not found" });
-      if (row.position_id === 2) {
-        return res.status(400).json({ error: "Order is already in position 2" });
+      if (row.is_archived === 0) {
+        return res.status(400).json({ error: "Order is already unarchived" });
       }
-      return res.status(400).json({ error: "Order is not in position 3" });
+      // لأي حالة غير متوقعة:
+      return res.status(400).json({ error: "Unable to unarchive order" });
     }
 
     const [[updated]] = await pool.query(
-      "SELECT id AS order_id, position_id, is_archived FROM orders WHERE id = ?",
+      "SELECT id AS order_id, is_archived FROM orders WHERE id = ?",
       [id]
     );
 
     return res.json({
-      message: "Order moved from position 3 to 2 and unarchived successfully",
+      message: "Order unarchived successfully",
       order: updated
     });
   } catch (err) {
-    console.error("moveOrderPos3To2 error:", err);
+    console.error("unarchiveOrderStrict error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }

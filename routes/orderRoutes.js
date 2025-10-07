@@ -29,7 +29,8 @@ import {
   updateUnarchivedPos2Order,
   applyPurchaseToOrder,
   replacePurchaseForOrder,
-  moveOrderPos3To2
+  unarchiveOrderStrict
+ 
 
   
 
@@ -114,7 +115,8 @@ router.post("/pos2/unarchived/:id/update", updateUnarchivedPos2Order);
 
 router.post("/:orderId/apply-purchase", applyPurchaseToOrder);
 router.post("/:orderId/replace-purchase", replacePurchaseForOrder);
-// تغيير الحالة من 3 إلى 2
-router.post("/:id/pos3-to-2", moveOrderPos3To2);
+
+// تصفير الأرشفة فقط (1 → 0)
+router.post("/:id/unarchive", unarchiveOrderStrict);
 
 export default router;
