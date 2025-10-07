@@ -28,7 +28,8 @@ import {
   updateArchivedPos2Order,
   updateUnarchivedPos2Order,
   applyPurchaseToOrder,
-  replacePurchaseForOrder
+  replacePurchaseForOrder,
+  moveOrderPos3To2
 
   
 
@@ -113,5 +114,7 @@ router.post("/pos2/unarchived/:id/update", updateUnarchivedPos2Order);
 
 router.post("/:orderId/apply-purchase", applyPurchaseToOrder);
 router.post("/:orderId/replace-purchase", replacePurchaseForOrder);
+// تغيير الحالة من 3 إلى 2
+router.post("/:id/pos3-to-2", moveOrderPos3To2);
 
 export default router;

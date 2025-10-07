@@ -1394,3 +1394,48 @@ export async function replacePurchaseForOrder(req, res) {
     return res.status(500).json({ error: "Internal server error" });
   }
 }
+
+
+
+// POST /api/orders/:id/pos3-to-2
+export async function moveOrderPos3To2(req, res) {
+  const { id } = req.params;
+  if (!id || Number.isNaN(Number(id))) {
+    return res.status(400).json({ error: "Valid order id is required" });
+  }
+
+  try {
+    // تحديث ذري بشرط أن تكون الحالة الحالية = 3
+    const [upd] = await pool.query(
+      "UPDATE orders SET position_id = 2 WHERE id = ? AND position_id = 3",
+      [id]
+    );
+
+    if (upd.affectedRows === 0) {
+      // إمّا الطلب غير موجود أو ليس في الحالة 3
+      const [[row]] = await pool.query(
+        "SELECT id, position_id FROM orders WHERE id = ?",
+        [id]
+      );
+      if (!row) return res.status(404).json({ error: "Order not found" });
+      if (row.position_id === 2) {
+        return res.status(400).json({ error: "Order is already in position 2" });
+      }
+      return res.status(400).json({ error: "Order is not in position 3" });
+    }
+
+    const [[updated]] = await pool.query(
+      "SELECT id AS order_id, position_id FROM orders WHERE id = ?",
+      [id]
+    );
+
+    return res.json({
+      message: "Order moved from position 3 to 2 successfully",
+      order: updated
+    });
+  } catch (err) {
+    console.error("moveOrderPos3To2 error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
