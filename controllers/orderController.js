@@ -1243,29 +1243,68 @@ export async function applyPurchaseToOrder(req, res) {
 }
 
 
+
+/**
+ * POST /api/orders/:orderId/replace-purchase
+ * body (أيها متاح):
+ *  - purchase_method?: string | null
+ *  - old_invoice_id?: number            // مطلوب فقط إذا أردت استبدال الفاتورة
+ *  - invoice_base64?: string            // مطلوب فقط إذا أردت استبدال الفاتورة
+ *  - cart_id?: number | null            // اختياري (إن أُرسل نحدّثه حتى لو null)
+ *
+ * السيناريوهات:
+ *  - purchase_method فقط → نحدّثه وننهي.
+ *  - old_invoice_id + invoice_base64 → نستبدل الفاتورة فقط.
+ *  - الثلاثة معًا → نحدّث الكل.
+ * ملاحظة: لو طلبت استبدال الفاتورة يجب إرسال (old_invoice_id + invoice_base64) معًا.
+ */
 export async function replacePurchaseForOrder(req, res) {
   const { orderId } = req.params;
-  const { old_invoice_id, purchase_method, invoice_base64, cart_id } = req.body || {};
+  const {
+    purchase_method,
+    old_invoice_id,
+    invoice_base64,
+    cart_id
+  } = req.body ?? {};
 
-  // تحققات المدخلات
   if (!orderId || Number.isNaN(Number(orderId))) {
     return res.status(400).json({ error: "Valid orderId is required" });
   }
-  if (!old_invoice_id || Number.isNaN(Number(old_invoice_id))) {
-    return res.status(400).json({ error: "Valid old_invoice_id is required" });
+
+  // هل هناك عملية استبدال فاتورة؟
+  const wantsInvoiceReplace =
+    Object.prototype.hasOwnProperty.call(req.body || {}, "old_invoice_id") ||
+    Object.prototype.hasOwnProperty.call(req.body || {}, "invoice_base64");
+
+  // إن كان فيه عملية فاتورة، يجب إرسال الاثنين معًا
+  if (wantsInvoiceReplace) {
+    const both =
+      old_invoice_id != null &&
+      typeof invoice_base64 === "string" &&
+      invoice_base64.trim() !== "";
+    if (!both) {
+      return res.status(400).json({
+        error:
+          "To replace invoice you must send BOTH old_invoice_id and invoice_base64 (non-empty)."
+      });
+    }
   }
-  if (!purchase_method || typeof purchase_method !== "string") {
-    return res.status(400).json({ error: "purchase_method is required (string)" });
-  }
-  if (!invoice_base64 || typeof invoice_base64 !== "string" || invoice_base64.trim() === "") {
-    return res.status(400).json({ error: "invoice_base64 is required (non-empty string)" });
+
+  // لو لم يُرسل أي شيء للتحديث
+  const hasPurchaseMethodKey = Object.prototype.hasOwnProperty.call(
+    req.body || {},
+    "purchase_method"
+  );
+  const hasCartKey = Object.prototype.hasOwnProperty.call(req.body || {}, "cart_id");
+  if (!wantsInvoiceReplace && !hasPurchaseMethodKey && !hasCartKey) {
+    return res.status(400).json({ error: "No fields provided to update" });
   }
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // 1) قفل الطلب والتأكد من وجوده ومطابقة الفاتورة الحالية
+    // اقفل الطلب
     const [[order]] = await conn.query(
       `SELECT id, invoice_id FROM orders WHERE id = ? FOR UPDATE`,
       [orderId]
@@ -1274,67 +1313,84 @@ export async function replacePurchaseForOrder(req, res) {
       await conn.rollback(); conn.release();
       return res.status(404).json({ error: "Order not found" });
     }
-    if (order.invoice_id == null) {
-      await conn.rollback(); conn.release();
-      return res.status(400).json({ error: "Order has no invoice to replace" });
+
+    // 1) استبدال الفاتورة (إن طُلِبت)
+    let newInvoiceId = null;
+    if (wantsInvoiceReplace) {
+      // تحقق تطابق old_invoice_id مع الفاتورة الحالية
+      if (order.invoice_id == null) {
+        await conn.rollback(); conn.release();
+        return res
+          .status(400)
+          .json({ error: "Order has no current invoice to replace" });
+      }
+      if (Number(order.invoice_id) !== Number(old_invoice_id)) {
+        await conn.rollback(); conn.release();
+        return res.status(400).json({
+          error: "old_invoice_id does not match current order.invoice_id"
+        });
+      }
+
+      // احذف القديمة (سيجعل orders.invoice_id = NULL بسبب FK ON DELETE SET NULL)
+      const [del] = await conn.query(
+        `DELETE FROM purchase_invoices WHERE id = ?`,
+        [old_invoice_id]
+      );
+      if (del.affectedRows === 0) {
+        await conn.rollback(); conn.release();
+        return res.status(404).json({ error: "Old invoice not found" });
+      }
+
+      // أدخل الجديدة
+      const [ins] = await conn.query(
+        `INSERT INTO purchase_invoices (invoice_image_base64) VALUES (?)`,
+        [invoice_base64]
+      );
+      newInvoiceId = ins.insertId;
+
+      // اربطها بالطلب
+      const [updInv] = await conn.query(
+        `UPDATE orders SET invoice_id = ? WHERE id = ?`,
+        [newInvoiceId, orderId]
+      );
+      if (updInv.affectedRows === 0) {
+        throw new Error("Failed to link new invoice to the order");
+      }
     }
-    if (Number(order.invoice_id) !== Number(old_invoice_id)) {
-      await conn.rollback(); conn.release();
-      return res.status(400).json({ error: "old_invoice_id does not match order.invoice_id" });
+
+    // 2) تحديث purchase_method إن تم إرسال المفتاح (حتى لو null)
+    if (hasPurchaseMethodKey) {
+      await conn.query(
+        `UPDATE orders SET purchase_method = ? WHERE id = ?`,
+        [purchase_method ?? null, orderId]
+      );
     }
 
-    // 2) حذف الفاتورة القديمة (FK ON DELETE SET NULL سيجعل orders.invoice_id = NULL)
-    const [del] = await conn.query(
-      `DELETE FROM purchase_invoices WHERE id = ?`,
-      [old_invoice_id]
-    );
-    if (del.affectedRows === 0) {
-      // نعتبرها خطأ لأننا نتوقع وجود الفاتورة
-      await conn.rollback(); conn.release();
-      return res.status(404).json({ error: "Old invoice not found" });
-    }
-
-    // 3) إدراج الفاتورة الجديدة
-    const [ins] = await conn.query(
-      `INSERT INTO purchase_invoices (invoice_image_base64) VALUES (?)`,
-      [invoice_base64]
-    );
-    const newInvoiceId = ins.insertId;
-
-    // 4) تحديث الطلب: purchase_method + invoice_id (+ cart_id إن أُرسل)
-    const sets = [`purchase_method = ?`, `invoice_id = ?`];
-    const vals = [purchase_method, newInvoiceId];
-
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "cart_id")) {
-      sets.push(`cart_id = ?`);
-      vals.push(cart_id ?? null); // null مسموح (اختياري)
-    }
-
-    const [upd] = await conn.query(
-      `UPDATE orders SET ${sets.join(", ")} WHERE id = ?`,
-      [...vals, orderId]
-    );
-    if (upd.affectedRows === 0) {
-      throw new Error("Failed to update order after invoice replacement");
+    // 3) تحديث cart_id إن تم إرسال المفتاح (حتى لو null)
+    if (hasCartKey) {
+      await conn.query(
+        `UPDATE orders SET cart_id = ? WHERE id = ?`,
+        [cart_id ?? null, orderId]
+      );
     }
 
     await conn.commit();
     conn.release();
 
     return res.json({
-      message: "Order purchase updated: old invoice replaced with new one",
+      message: "Order updated successfully",
       order_id: Number(orderId),
-      old_invoice_id: Number(old_invoice_id),
-      new_invoice_id: newInvoiceId,
-      purchase_method,
-      cart_id: Object.prototype.hasOwnProperty.call(req.body || {}, "cart_id")
-        ? (cart_id ?? null)
-        : undefined
+      // نرجع ما تم تحديثه فقط لراحتك
+      updated: {
+        ...(hasPurchaseMethodKey ? { purchase_method: purchase_method ?? null } : {}),
+        ...(wantsInvoiceReplace ? { old_invoice_id, new_invoice_id: newInvoiceId } : {}),
+        ...(hasCartKey ? { cart_id: cart_id ?? null } : {})
+      }
     });
   } catch (err) {
     try { await conn.rollback(); } catch {}
     conn.release();
-    console.error("replacePurchaseForOrder error:", err);
+    console.error("replacePurchaseForOrder (flex) error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
