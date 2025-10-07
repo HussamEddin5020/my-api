@@ -37,6 +37,25 @@ export async function getAllCarts(req, res) {
   }
 }
 
+export async function getAvailableCarts(req, res) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, orders_count, is_available
+       FROM cart
+       WHERE is_available = 1
+       ORDER BY id DESC`
+    );
+
+    res.json({
+      message: "Available carts fetched successfully",
+      carts: rows
+    });
+  } catch (err) {
+    console.error("Get available carts error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
 // ✅ زيادة orders_count لسلة محددة
 export async function incrementCart(req, res) {
   const { id } = req.params;
