@@ -1397,6 +1397,7 @@ export async function replacePurchaseForOrder(req, res) {
 
 
 
+
 // POST /api/orders/:id/pos3-to-2
 export async function moveOrderPos3To2(req, res) {
   const { id } = req.params;
@@ -1405,16 +1406,15 @@ export async function moveOrderPos3To2(req, res) {
   }
 
   try {
-    // تحديث ذري بشرط أن تكون الحالة الحالية = 3
+    // غيّر الحالة إلى 2 وامسح الأرشفة في عملية واحدة
     const [upd] = await pool.query(
-      "UPDATE orders SET position_id = 2 WHERE id = ? AND position_id = 3",
+      "UPDATE orders SET position_id = 2, is_archived = 0 WHERE id = ? AND position_id = 3",
       [id]
     );
 
     if (upd.affectedRows === 0) {
-      // إمّا الطلب غير موجود أو ليس في الحالة 3
       const [[row]] = await pool.query(
-        "SELECT id, position_id FROM orders WHERE id = ?",
+        "SELECT id, position_id, is_archived FROM orders WHERE id = ?",
         [id]
       );
       if (!row) return res.status(404).json({ error: "Order not found" });
@@ -1425,12 +1425,12 @@ export async function moveOrderPos3To2(req, res) {
     }
 
     const [[updated]] = await pool.query(
-      "SELECT id AS order_id, position_id FROM orders WHERE id = ?",
+      "SELECT id AS order_id, position_id, is_archived FROM orders WHERE id = ?",
       [id]
     );
 
     return res.json({
-      message: "Order moved from position 3 to 2 successfully",
+      message: "Order moved from position 3 to 2 and unarchived successfully",
       order: updated
     });
   } catch (err) {
@@ -1438,4 +1438,3 @@ export async function moveOrderPos3To2(req, res) {
     return res.status(500).json({ error: "Internal server error" });
   }
 }
-
