@@ -196,3 +196,60 @@ export async function getAvailableBoxes(req, res) {
   }
 }
 
+
+/**
+ * POST /api/boxes/:boxId/unavailable
+ * - تجعل الصندوق غير متاح: is_available = 0
+ * - ثم تغيّر كل الطلبات التابعة له ذات position_id=3 إلى position_id=4
+ * - كل ذلك داخل معاملة ذرّية (Transaction)
+ */
+export async function setBoxUnavailableAndMoveOrders(req, res) {
+  const { boxId } = req.params;
+  if (!boxId || Number.isNaN(Number(boxId))) {
+    return res.status(400).json({ error: "Valid boxId is required" });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) تأكيد وجود الصندوق وقفل صفه
+    const [[box]] = await conn.query(
+      `SELECT id, is_available FROM box WHERE id = ? FOR UPDATE`,
+      [boxId]
+    );
+    if (!box) {
+      await conn.rollback();
+      return res.status(404).json({ error: "Box not found" });
+    }
+
+    // 2) اجعل الصندوق غير متاح دائماً (حتى لو كان 0 مسبقاً)
+    await conn.query(
+      `UPDATE box SET is_available = 0 WHERE id = ?`,
+      [boxId]
+    );
+
+    // 3) حرّك الطلبات التابعة للصندوق من 3 إلى 4
+    const [updOrders] = await conn.query(
+      `UPDATE orders
+          SET position_id = 4
+        WHERE box_id = ?
+          AND position_id = 3`,
+      [boxId]
+    );
+
+    await conn.commit();
+
+    return res.json({
+      message: "Box set to unavailable and related orders moved from position 3 to 4",
+      box: { id: Number(boxId), is_available: 0 },
+      moved_orders_count: updOrders.affectedRows
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("setBoxUnavailableAndMoveOrders error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  } finally {
+    conn.release();
+  }
+}
