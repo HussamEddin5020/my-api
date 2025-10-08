@@ -118,6 +118,8 @@ export async function getOrdersByCartId(req, res) {
 }
 
 // تغيير حالة السلة إلى 0 (غير متاحة)
+
+
 export async function setCartUnavailable(req, res) {
   const { cartId } = req.params;
 
@@ -125,46 +127,65 @@ export async function setCartUnavailable(req, res) {
     return res.status(400).json({ error: "Valid cartId is required" });
   }
 
+  const conn = await pool.getConnection();
   try {
-    // (اختياري) تحقّق أولًا من وجود السلة وحالتها الحالية
-    const [[cart]] = await pool.query(
-      "SELECT id, orders_count, is_available FROM cart WHERE id = ?",
+    await conn.beginTransaction();
+
+    // 1) تأكيد وجود السلة وقفلها
+    const [[cart]] = await conn.query(
+      "SELECT id, orders_count, is_available FROM cart WHERE id = ? FOR UPDATE",
       [cartId]
     );
-    if (!cart) return res.status(404).json({ error: "Cart not found" });
-
-    if (cart.is_available === 0) {
-      return res.json({
-        message: "Cart is already unavailable",
-        cart: cart
-      });
+    if (!cart) {
+      await conn.rollback();
+      return res.status(404).json({ error: "Cart not found" });
     }
 
-    // تحديث الحالة إلى 0
-    const [result] = await pool.query(
+    const wasAvailable = cart.is_available === 1;
+
+    // 2) تعطيل السلة (حتى لو كانت معطلة من قبل لا مشكلة)
+    await conn.query(
       "UPDATE cart SET is_available = 0 WHERE id = ?",
       [cartId]
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(500).json({ error: "Failed to update cart state" });
-    }
+    // 3) ترقية الطلبات التابعة للسلة إلى position_id = 3
+    //    بشرط: invoice_id IS NOT NULL AND invoice_id <> 0
+    //           AND purchase_method IS NOT NULL AND purchase_method <> ''
+    const [orderUpdate] = await conn.query(
+      `UPDATE orders
+          SET position_id = 3
+        WHERE cart_id = ?
+          AND (invoice_id IS NOT NULL AND invoice_id <> 0)
+          AND (purchase_method IS NOT NULL AND purchase_method <> '')
+          AND position_id <> 3`,
+      [cartId]
+    );
 
-    // إرجاع السلة بعد التحديث
-    const [[updated]] = await pool.query(
+    // 4) إحضار حالة السلة بعد التحديث
+    const [[updatedCart]] = await conn.query(
       "SELECT id, orders_count, is_available FROM cart WHERE id = ?",
       [cartId]
     );
 
-    res.json({
-      message: "Cart set to unavailable successfully",
-      cart: updated
+    await conn.commit();
+
+    return res.json({
+      message: wasAvailable
+        ? "Cart set to unavailable; eligible orders moved to position 3"
+        : "Cart was already unavailable; eligible orders moved to position 3",
+      cart: updatedCart,
+      moved_orders_count: orderUpdate.affectedRows
     });
   } catch (err) {
+    await conn.rollback();
     console.error("Set cart unavailable error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
+  } finally {
+    conn.release();
   }
 }
+
 
 
 export async function getUnavailableCarts(req, res) {

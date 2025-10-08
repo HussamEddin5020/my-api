@@ -69,6 +69,8 @@ export async function addOrderToCart(req, res) {
 }
 
 
+
+
 export async function removeOrderFromCart(req, res) {
   const { orderId } = req.params;
   const conn = await pool.getConnection();
@@ -76,38 +78,64 @@ export async function removeOrderFromCart(req, res) {
   try {
     await conn.beginTransaction();
 
-    // جيب cart_id الحالي
-    const [rows] = await conn.query(
-      `SELECT cart_id FROM orders WHERE id = ?`,
+    // اقفل صف الطلب واحصل على cart_id الحالي
+    const [[order]] = await conn.query(
+      `SELECT id, cart_id, is_archived
+       FROM orders
+       WHERE id = ?
+       FOR UPDATE`,
       [orderId]
     );
 
-    if (rows.length === 0 || !rows[0].cart_id) {
+    if (!order) {
       await conn.rollback();
-      return res.status(404).json({ error: "Order not linked to any cart" });
+      return res.status(404).json({ error: "Order not found" });
     }
 
-    const cartId = rows[0].cart_id;
+    const oldCartId = order.cart_id;
 
-    // امسح الربط
-    await conn.query(`UPDATE orders SET cart_id = NULL WHERE id = ?`, [orderId]);
-
-    // انقص العداد
+    // اجعل الطلب غير مؤرشف دائمًا، وامسح ربط السلة (حتى لو لم تكن مرتبطة)
     await conn.query(
-      `UPDATE cart SET orders_count = orders_count - 1 WHERE id = ? AND orders_count > 0`,
-      [cartId]
+      `UPDATE orders
+         SET cart_id = NULL,
+             is_archived = 0
+       WHERE id = ?`,
+      [orderId]
     );
 
+    // لو كانت هناك سلة قديمة، أنقص عدّادها بشكل آمن (لا ينزل تحت الصفر)
+    let decremented = false;
+    if (oldCartId != null) {
+      await conn.query(
+        `UPDATE cart
+            SET orders_count = CASE WHEN orders_count > 0 THEN orders_count - 1 ELSE 0 END
+          WHERE id = ?`,
+        [oldCartId]
+      );
+      decremented = true;
+    }
+
     await conn.commit();
-    res.json({ message: `Order ${orderId} removed from cart ${cartId}` });
+
+    return res.json({
+      message:
+        oldCartId != null
+          ? `Order ${orderId} removed from cart ${oldCartId} and unarchived`
+          : `Order ${orderId} unarchived (no cart to remove)`,
+      order_id: Number(orderId),
+      previous_cart_id: oldCartId,            // قد تكون null
+      decremented_previous_cart: decremented, // true/false
+      is_archived: 0
+    });
   } catch (err) {
     await conn.rollback();
     console.error("Remove order from cart error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   } finally {
     conn.release();
   }
 }
+
 
 
 export async function getOrdersNotAssignedInCart(req, res) {
