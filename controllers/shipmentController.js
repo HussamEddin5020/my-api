@@ -268,3 +268,101 @@ export const updateShipment = async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 };
+
+
+export const getShippingShipments = async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        s.id,
+        s.box_id,
+        b.number               AS box_number,
+        s.company_id,
+        sc.company_name,
+        s.sender_name,
+        s.weight,
+        s.status_id,
+        st.name                AS status_name
+      FROM shipments s
+      LEFT JOIN box                b  ON s.box_id     = b.id
+      LEFT JOIN shipping_companies sc ON s.company_id = sc.id
+      JOIN shipment_status         st ON s.status_id  = st.id
+      WHERE s.status_id = 2
+      ORDER BY s.id DESC
+    `);
+
+    res.json({
+      message: "In-transit shipments (status=2) fetched successfully",
+      shipments: rows
+    });
+  } catch (err) {
+    console.error("Get in-transit shipments error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+
+
+// POST /api/shipments/:shipmentId/arrive
+export const markShipmentArrivedAndPromoteOrders = async (req, res) => {
+  const { shipmentId } = req.params;
+  if (!shipmentId || Number.isNaN(Number(shipmentId))) {
+    return res.status(400).json({ error: "Valid shipmentId is required" });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // 1) قفل الشحنة وجلب box_id والحالة الحالية
+    const [[ship]] = await conn.query(
+      `SELECT id, status_id, box_id
+         FROM shipments
+        WHERE id = ?
+        FOR UPDATE`,
+      [shipmentId]
+    );
+    if (!ship) {
+      await conn.rollback();
+      return res.status(404).json({ error: "Shipment not found" });
+    }
+    if (ship.status_id !== 2) {
+      await conn.rollback();
+      return res.status(400).json({ error: "Shipment is not in 'shipping' status (2)" });
+    }
+
+    // 2) تحديث حالة الشحنة إلى وصلت (3)
+    await conn.query(
+      `UPDATE shipments SET status_id = 3 WHERE id = ?`,
+      [shipmentId]
+    );
+
+    // 3) لو عندها صندوق، حرّك كل الطلبات المرتبطة به إلى position_id = 5
+    let moved = 0;
+    if (ship.box_id != null) {
+      const [upd] = await conn.query(
+        `UPDATE orders
+            SET position_id = 5
+          WHERE box_id = ?
+            AND position_id <> 5`,
+        [ship.box_id]
+      );
+      moved = upd.affectedRows;
+    }
+
+    await conn.commit();
+
+    return res.json({
+      message: "Shipment marked as arrived and related orders moved to position 5",
+      shipment: { id: Number(shipmentId), status_id: 3 },
+      box_id: ship.box_id,                // قد تكون null
+      moved_orders_count: moved
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("markShipmentArrivedAndPromoteOrders error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  } finally {
+    conn.release();
+  }
+};
