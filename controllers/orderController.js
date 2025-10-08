@@ -1258,6 +1258,7 @@ export async function applyPurchaseToOrder(req, res) {
  *  - الثلاثة معًا → نحدّث الكل.
  * ملاحظة: لو طلبت استبدال الفاتورة يجب إرسال (old_invoice_id + invoice_base64) معًا.
  */
+
 export async function replacePurchaseForOrder(req, res) {
   const { orderId } = req.params;
   const {
@@ -1271,12 +1272,11 @@ export async function replacePurchaseForOrder(req, res) {
     return res.status(400).json({ error: "Valid orderId is required" });
   }
 
-  // هل هناك عملية استبدال فاتورة؟
+  // هل هناك عملية استبدال للفاتورة؟
   const wantsInvoiceReplace =
     Object.prototype.hasOwnProperty.call(req.body || {}, "old_invoice_id") ||
     Object.prototype.hasOwnProperty.call(req.body || {}, "invoice_base64");
 
-  // إن كان فيه عملية فاتورة، يجب إرسال الاثنين معًا
   if (wantsInvoiceReplace) {
     const both =
       old_invoice_id != null &&
@@ -1290,12 +1290,9 @@ export async function replacePurchaseForOrder(req, res) {
     }
   }
 
-  // لو لم يُرسل أي شيء للتحديث
-  const hasPurchaseMethodKey = Object.prototype.hasOwnProperty.call(
-    req.body || {},
-    "purchase_method"
-  );
-  const hasCartKey = Object.prototype.hasOwnProperty.call(req.body || {}, "cart_id");
+  // لا شيء للتحديث؟
+  const hasPurchaseMethodKey = Object.prototype.hasOwnProperty.call(req.body || {}, "purchase_method");
+  const hasCartKey          = Object.prototype.hasOwnProperty.call(req.body || {}, "cart_id");
   if (!wantsInvoiceReplace && !hasPurchaseMethodKey && !hasCartKey) {
     return res.status(400).json({ error: "No fields provided to update" });
   }
@@ -1304,9 +1301,11 @@ export async function replacePurchaseForOrder(req, res) {
   try {
     await conn.beginTransaction();
 
-    // اقفل الطلب
+    // اقفل الطلب وجِب حالته الحالية بما فيها cart_id القديم
     const [[order]] = await conn.query(
-      `SELECT id, invoice_id FROM orders WHERE id = ? FOR UPDATE`,
+      `SELECT id, invoice_id, cart_id
+       FROM orders
+       WHERE id = ? FOR UPDATE`,
       [orderId]
     );
     if (!order) {
@@ -1314,24 +1313,21 @@ export async function replacePurchaseForOrder(req, res) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    // 1) استبدال الفاتورة (إن طُلِبت)
+    const oldCartId = order.cart_id;
+
+    // 1) استبدال الفاتورة (إن طُلِب)
     let newInvoiceId = null;
     if (wantsInvoiceReplace) {
-      // تحقق تطابق old_invoice_id مع الفاتورة الحالية
       if (order.invoice_id == null) {
         await conn.rollback(); conn.release();
-        return res
-          .status(400)
-          .json({ error: "Order has no current invoice to replace" });
+        return res.status(400).json({ error: "Order has no current invoice to replace" });
       }
       if (Number(order.invoice_id) !== Number(old_invoice_id)) {
         await conn.rollback(); conn.release();
-        return res.status(400).json({
-          error: "old_invoice_id does not match current order.invoice_id"
-        });
+        return res.status(400).json({ error: "old_invoice_id does not match current order.invoice_id" });
       }
 
-      // احذف القديمة (سيجعل orders.invoice_id = NULL بسبب FK ON DELETE SET NULL)
+      // احذف الفاتورة القديمة (FK سيجعل orders.invoice_id = NULL)
       const [del] = await conn.query(
         `DELETE FROM purchase_invoices WHERE id = ?`,
         [old_invoice_id]
@@ -1341,7 +1337,7 @@ export async function replacePurchaseForOrder(req, res) {
         return res.status(404).json({ error: "Old invoice not found" });
       }
 
-      // أدخل الجديدة
+      // أدخل الفاتورة الجديدة
       const [ins] = await conn.query(
         `INSERT INTO purchase_invoices (invoice_image_base64) VALUES (?)`,
         [invoice_base64]
@@ -1358,7 +1354,7 @@ export async function replacePurchaseForOrder(req, res) {
       }
     }
 
-    // 2) تحديث purchase_method إن تم إرسال المفتاح (حتى لو null)
+    // 2) تحديث purchase_method إن تم إرسال المفتاح
     if (hasPurchaseMethodKey) {
       await conn.query(
         `UPDATE orders SET purchase_method = ? WHERE id = ?`,
@@ -1366,11 +1362,26 @@ export async function replacePurchaseForOrder(req, res) {
       );
     }
 
-    // 3) تحديث cart_id إن تم إرسال المفتاح (حتى لو null)
+    // 3) تحديث cart_id إن تم إرسال المفتاح
+    let decrementedOldCart = false;
     if (hasCartKey) {
+      const newCartId = cart_id ?? null;
+
+      // إذا كان للطلب سلة قديمة، وتغيّر إلى null أو سلة أخرى مختلفة ⇒ أنقص عدّاد القديمة
+      if (oldCartId != null && (newCartId == null || Number(newCartId) !== Number(oldCartId))) {
+        await conn.query(
+          `UPDATE cart
+             SET orders_count = CASE WHEN orders_count > 0 THEN orders_count - 1 ELSE 0 END
+           WHERE id = ?`,
+          [oldCartId]
+        );
+        decrementedOldCart = true;
+      }
+
+      // حدّث cart_id في الطلب (حتى لو null)
       await conn.query(
         `UPDATE orders SET cart_id = ? WHERE id = ?`,
-        [cart_id ?? null, orderId]
+        [newCartId, orderId]
       );
     }
 
@@ -1380,20 +1391,20 @@ export async function replacePurchaseForOrder(req, res) {
     return res.json({
       message: "Order updated successfully",
       order_id: Number(orderId),
-      // نرجع ما تم تحديثه فقط لراحتك
       updated: {
         ...(hasPurchaseMethodKey ? { purchase_method: purchase_method ?? null } : {}),
         ...(wantsInvoiceReplace ? { old_invoice_id, new_invoice_id: newInvoiceId } : {}),
-        ...(hasCartKey ? { cart_id: cart_id ?? null } : {})
+        ...(hasCartKey ? { cart_id: cart_id ?? null, decremented_old_cart: decrementedOldCart } : {})
       }
     });
   } catch (err) {
     try { await conn.rollback(); } catch {}
     conn.release();
-    console.error("replacePurchaseForOrder (flex) error:", err);
+    console.error("replacePurchaseForOrder (with cart decrement) error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
+
 
 
 
