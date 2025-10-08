@@ -1,5 +1,5 @@
 import express from "express";
-import { addShipment, addShipmentImage, getShipments, updateShipment } from "../controllers/shipmentController.js";
+import { addShipment, addShipmentImage, getShipments, updateShipment, getReadyShipments } from "../controllers/shipmentController.js";
 
 const router = express.Router();
 
@@ -12,5 +12,7 @@ router.get("/", getShipments);
 router.post("/image", addShipmentImage);
 
 router.put("/:id", updateShipment);
+
+router.get("/ready", getReadyShipments); // GET /api/shipments/ready
 
 export default router;

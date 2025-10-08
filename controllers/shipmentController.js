@@ -120,7 +120,33 @@ export const getShipments = async (req, res) => {
   }
 };
 
+export const getReadyShipments = async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        s.id,
+        s.box_id,
+        b.number          AS box_number,
+        s.company_id,
+        sc.company_name,
+        s.sender_name,
+        s.weight
+      FROM shipments s
+      LEFT JOIN box                b  ON s.box_id = b.id
+      LEFT JOIN shipping_companies sc ON s.company_id = sc.id
+      WHERE s.status_id = 1
+      ORDER BY s.id DESC
+    `);
 
+    res.json({
+      message: "Shipments (status=ready) fetched successfully",
+      shipments: rows
+    });
+  } catch (err) {
+    console.error("Get ready shipments error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
 
 export const updateShipment = async (req, res) => {
   const { id } = req.params;
