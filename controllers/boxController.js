@@ -197,13 +197,21 @@ export async function getAvailableBoxes(req, res) {
 }
 
 
+
+
 /**
- * POST /api/boxes/:boxId/unavailable
- * - تجعل الصندوق غير متاح: is_available = 0
- * - ثم تغيّر كل الطلبات التابعة له ذات position_id=3 إلى position_id=4
- * - كل ذلك داخل معاملة ذرّية (Transaction)
+ * POST /api/boxes/:boxId/move-to-shipping
+ *
+ * الوظائف:
+ * 1) ضبط الصندوق is_available = 0
+ * 2) تحويل جميع الطلبات المرتبطة بالصندوق (box_id = :boxId) من position_id=3 إلى position_id=4
+ * 3) نقل حالة الشحنات التابعة للصندوق (shipments.box_id = :boxId) إلى status_id = 2 (جاري الشحن)
+ *
+ * ملاحظة: نحدّث الشحنات فقط إن كانت حالتها "جاهزة للشحن" (status_id = 1)
+ * لتفادي إنزال شحنات وصلت (3) أو جارية (2) للخلف.
+ * لو تحب نجبر التعيين إلى 2 لأي حالة، أخبرني أزيل شرط =1.
  */
-export async function setBoxUnavailableAndMoveOrders(req, res) {
+export async function moveBoxToShipping(req, res) {
   const { boxId } = req.params;
   if (!boxId || Number.isNaN(Number(boxId))) {
     return res.status(400).json({ error: "Valid boxId is required" });
@@ -213,7 +221,7 @@ export async function setBoxUnavailableAndMoveOrders(req, res) {
   try {
     await conn.beginTransaction();
 
-    // 1) تأكيد وجود الصندوق وقفل صفه
+    // 1) تأكيد وجود الصندوق وقفل صفّه
     const [[box]] = await conn.query(
       `SELECT id, is_available FROM box WHERE id = ? FOR UPDATE`,
       [boxId]
@@ -223,14 +231,14 @@ export async function setBoxUnavailableAndMoveOrders(req, res) {
       return res.status(404).json({ error: "Box not found" });
     }
 
-    // 2) اجعل الصندوق غير متاح دائماً (حتى لو كان 0 مسبقاً)
+    // 2) اجعل الصندوق غير متاح دائمًا
     await conn.query(
       `UPDATE box SET is_available = 0 WHERE id = ?`,
       [boxId]
     );
 
-    // 3) حرّك الطلبات التابعة للصندوق من 3 إلى 4
-    const [updOrders] = await conn.query(
+    // 3) حرّك الطلبات من 3 → 4 (الخاصة بهذا الصندوق)
+    const [ordersUpd] = await conn.query(
       `UPDATE orders
           SET position_id = 4
         WHERE box_id = ?
@@ -238,16 +246,27 @@ export async function setBoxUnavailableAndMoveOrders(req, res) {
       [boxId]
     );
 
+    // 4) انقل حالة الشحنات الخاصة بالصندوق إلى "جاري الشحن" (2)
+    //    هنا نحدّث فقط الشحنات الجاهزة للشحن (1) لتفادي الرجوع للخلف.
+    const [shipUpd] = await conn.query(
+      `UPDATE shipments
+          SET status_id = 2
+        WHERE box_id = ?
+          AND status_id = 1`,
+      [boxId]
+    );
+
     await conn.commit();
 
     return res.json({
-      message: "Box set to unavailable and related orders moved from position 3 to 4",
+      message: "Box set unavailable, orders moved 3→4, shipments moved to 'shipping' (2)",
       box: { id: Number(boxId), is_available: 0 },
-      moved_orders_count: updOrders.affectedRows
+      moved_orders_count: ordersUpd.affectedRows,
+      moved_shipments_count: shipUpd.affectedRows
     });
   } catch (err) {
     await conn.rollback();
-    console.error("setBoxUnavailableAndMoveOrders error:", err);
+    console.error("moveBoxToShipping error:", err);
     return res.status(500).json({ error: "Internal server error" });
   } finally {
     conn.release();

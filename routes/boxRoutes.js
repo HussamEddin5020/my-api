@@ -1,5 +1,5 @@
 import express from "express";
-import { addBox, assignOrderToBox,setBoxUnavailableAndMoveOrders, removeOrderFromBox,getUnavailableBoxes,getAvailableBoxes, getAllBoxes, getOrdersByBox , getOrdersNotAssignedInBox} from "../controllers/boxController.js";
+import { addBox, assignOrderToBox,moveBoxToShipping, removeOrderFromBox,getUnavailableBoxes,getAvailableBoxes, getAllBoxes, getOrdersByBox , getOrdersNotAssignedInBox} from "../controllers/boxController.js";
 
 const router = express.Router();
 
@@ -23,7 +23,7 @@ router.get("/unavailable", getUnavailableBoxes);
 
 router.get("/available", getAvailableBoxes);
 
-router.post("/:boxId/unavailable", setBoxUnavailableAndMoveOrders);
+router.post("/:boxId/unavailable", moveBoxToShipping);
 
 
 
