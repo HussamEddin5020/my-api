@@ -120,6 +120,8 @@ export async function getOrdersByCartId(req, res) {
 // تغيير حالة السلة إلى 0 (غير متاحة)
 
 
+
+
 export async function setCartUnavailable(req, res) {
   const { cartId } = req.params;
 
@@ -131,9 +133,12 @@ export async function setCartUnavailable(req, res) {
   try {
     await conn.beginTransaction();
 
-    // 1) تأكيد وجود السلة وقفلها
+    // 1) قفل السلة
     const [[cart]] = await conn.query(
-      "SELECT id, orders_count, is_available FROM cart WHERE id = ? FOR UPDATE",
+      `SELECT id, orders_count, is_available
+         FROM cart
+        WHERE id = ?
+        FOR UPDATE`,
       [cartId]
     );
     if (!cart) {
@@ -141,50 +146,91 @@ export async function setCartUnavailable(req, res) {
       return res.status(404).json({ error: "Cart not found" });
     }
 
-    const wasAvailable = cart.is_available === 1;
-
-    // 2) تعطيل السلة (حتى لو كانت معطلة من قبل لا مشكلة)
-    await conn.query(
-      "UPDATE cart SET is_available = 0 WHERE id = ?",
+    // 2) قفل الطلبات المعنية (position_id = 2) وجلبها للتحقق
+    const [orders] = await conn.query(
+      `SELECT id, invoice_id, purchase_method, is_archived
+         FROM orders
+        WHERE cart_id = ?
+          AND position_id = 2
+        FOR UPDATE`,
       [cartId]
     );
 
-    // 3) ترقية الطلبات التابعة للسلة إلى position_id = 3
-    //    بشرط: invoice_id IS NOT NULL AND invoice_id <> 0
-    //           AND purchase_method IS NOT NULL AND purchase_method <> ''
-    const [orderUpdate] = await conn.query(
+    // لو ما فيه طلبات في الحالة 2، نسمح بالإغلاق مباشرة (حسب رغبتك)
+    // لو تبغى تمنع الإغلاق إذا ما فيه طلبات، بدّل الشرط حسب حاجتك.
+    if (orders.length === 0) {
+      // أغلق السلة فقط
+      await conn.query(`UPDATE cart SET is_available = 0 WHERE id = ?`, [cartId]);
+
+      await conn.commit();
+      return res.json({
+        message: "Cart set to unavailable (no pos=2 orders to move)",
+        cart: { id: Number(cartId), orders_count: cart.orders_count, is_available: 0 },
+        moved_orders_count: 0,
+        unarchived_orders_count: 0
+      });
+    }
+
+    // 3) تحقق أن "كل" الطلبات مستوفية للشروط
+    const invalid = orders.filter(
+      (o) =>
+        o.invoice_id == null ||
+        Number(o.invoice_id) === 0 ||
+        o.purchase_method == null ||
+        String(o.purchase_method).trim() === ""
+    );
+
+    if (invalid.length > 0) {
+      // فشل التحقق ⇒ إلغاء العملية كاملة
+      await conn.rollback();
+      return res.status(400).json({
+        error:
+          "Cannot close cart: not all orders meet the requirements (invoice + purchase_method).",
+        cart_id: Number(cartId),
+        invalid_order_ids: invalid.map((o) => o.id) // لمساعدتك في الواجهة
+      });
+    }
+
+    // 4) كل الطلبات مستوفية ⇒ صفّر الأرشفة للطلبات المعنية فقط
+    const [unarchiveUpd] = await conn.query(
+      `UPDATE orders
+          SET is_archived = 0
+        WHERE cart_id = ?
+          AND position_id = 2
+          AND is_archived = 1`,
+      [cartId]
+    );
+
+    // 5) حوّل الطلبات من 2 → 3
+    const [moveUpd] = await conn.query(
       `UPDATE orders
           SET position_id = 3
         WHERE cart_id = ?
-          AND (invoice_id IS NOT NULL AND invoice_id <> 0)
-          AND (purchase_method IS NOT NULL AND purchase_method <> '')
-          AND position_id <> 3`,
+          AND position_id = 2`,
       [cartId]
     );
 
-    // 4) إحضار حالة السلة بعد التحديث
-    const [[updatedCart]] = await conn.query(
-      "SELECT id, orders_count, is_available FROM cart WHERE id = ?",
-      [cartId]
-    );
+    // 6) أغلق السلة بعد نجاح نقل الطلبات وتصفير أرشفتها
+    await conn.query(`UPDATE cart SET is_available = 0 WHERE id = ?`, [cartId]);
 
     await conn.commit();
 
     return res.json({
-      message: wasAvailable
-        ? "Cart set to unavailable; eligible orders moved to position 3"
-        : "Cart was already unavailable; eligible orders moved to position 3",
-      cart: updatedCart,
-      moved_orders_count: orderUpdate.affectedRows
+      message:
+        "All orders validated; orders moved from position 2 to 3; cart set to unavailable.",
+      cart: { id: Number(cartId), orders_count: cart.orders_count, is_available: 0 },
+      moved_orders_count: moveUpd.affectedRows,
+      unarchived_orders_count: unarchiveUpd.affectedRows
     });
   } catch (err) {
     await conn.rollback();
-    console.error("Set cart unavailable error:", err);
+    console.error("setCartUnavailable strict error:", err);
     return res.status(500).json({ error: "Internal server error" });
   } finally {
     conn.release();
   }
 }
+
 
 
 
