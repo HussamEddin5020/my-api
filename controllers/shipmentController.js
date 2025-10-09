@@ -366,3 +366,37 @@ export const markShipmentArrivedAndPromoteOrders = async (req, res) => {
     conn.release();
   }
 };
+
+
+
+// GET /api/shipments/arrived  → status_id = 3 (الشحنة وصلت)
+export const getArrivedShipments = async (req, res) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT
+        s.id,
+        s.box_id,
+        b.number               AS box_number,
+        s.company_id,
+        sc.company_name,
+        s.sender_name,
+        s.weight,
+        s.status_id,
+        st.name                AS status_name
+      FROM shipments s
+      LEFT JOIN box                b  ON s.box_id     = b.id
+      LEFT JOIN shipping_companies sc ON s.company_id = sc.id
+      JOIN shipment_status         st ON s.status_id  = st.id
+      WHERE s.status_id = 3
+      ORDER BY s.id DESC
+    `);
+
+    res.json({
+      message: "Arrived shipments (status=3) fetched successfully",
+      shipments: rows
+    });
+  } catch (err) {
+    console.error("Get arrived shipments error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};

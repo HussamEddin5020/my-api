@@ -1,5 +1,5 @@
 import express from "express";
-import { addShipment, addShipmentImage, getShipments, updateShipment, getReadyShipments, getShippingShipments, markShipmentArrivedAndPromoteOrders } from "../controllers/shipmentController.js";
+import { addShipment, addShipmentImage, getShipments,getArrivedShipments, updateShipment, getReadyShipments, getShippingShipments, markShipmentArrivedAndPromoteOrders } from "../controllers/shipmentController.js";
 
 const router = express.Router();
 
@@ -18,5 +18,7 @@ router.get("/ready", getReadyShipments); // GET /api/shipments/ready
 router.get("/shipping", getShippingShipments);
 
 router.post("/:shipmentId/arrive", markShipmentArrivedAndPromoteOrders);
+
+router.get("/arrived", getArrivedShipments);
 
 export default router;
